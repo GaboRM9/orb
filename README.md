@@ -1,6 +1,6 @@
-# AI Showcase
+# orb
 
-Minimal AI SDK v7 demo: chat, tools, skills, settings. SQLite storage, Anthropic models.
+A calm, minimal agent workspace (AI SDK v7): chat, tools, skills, settings. SQLite storage, Anthropic models.
 
 ```
 npm i && npm run dev -- -p 3100
