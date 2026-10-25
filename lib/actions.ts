@@ -24,15 +24,17 @@ export async function clearThreads() {
   redirect("/chat");
 }
 
-export async function deleteThread(id: string) {
+// Runs and approvals are kept on purpose: deleting a chat must not erase the audit trail.
+export async function deleteThread(id: string, backTo: string) {
   db.prepare("delete from threads where id=?").run(id);
-  redirect("/chat");
+  revalidatePath("/", "layout");
+  redirect(backTo);
 }
 
 export async function toggleTool(name: string) {
   if (!toolNames.includes(name as never)) return;
   const off = new Set(disabledTools());
-  off.has(name) ? off.delete(name) : off.add(name);
+  if (!off.delete(name)) off.add(name); // delete returns false when it wasn't there: toggle on
   setSetting("tools_disabled", JSON.stringify([...off]));
   revalidatePath("/tools");
 }

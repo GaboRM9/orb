@@ -46,6 +46,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
             <div className="text-sm font-medium">{agent.name}</div>
             <div className="truncate text-xs text-mute">{agent.description}</div>
           </div>
+          <Link href={`/agents/${agent.id}/history`} className="btn text-xs">History</Link>
           <Link href={`/agents/${agent.id}?new=1`} className="btn text-xs">New conversation</Link>
         </header>
       )}
@@ -53,7 +54,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
         {!messages.length && (
           <div className="mt-24 space-y-3 text-center text-sm text-mute">
             <p>{agent ? `Say hi to ${agent.name}.` : "Ask anything, or run the full UI showcase."}</p>
-            <button className="btn" onClick={() => sendMessage({ text: TEST_UI })}>test ui</button>
+            <button className="btn" onClick={() => sendMessage({ text: TEST_UI })}>Run UI showcase</button>
           </div>
         )}
         {messages.map((m) => (
@@ -98,7 +99,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
             </div>
           </div>
         ))}
-        {error && <p className="text-sm text-fg">⚠ {error.message}</p>}
+        {error && <p className="text-sm text-fg">{error.message}</p>}
         <div ref={end} />
       </div>
       <form

@@ -1,9 +1,9 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { convertToModelMessages, createIdGenerator, createUIMessageStreamResponse, generateId, isStepCount, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { getAgent, getSetting, threadAgentId } from "@/lib/db";
-import { loadChat, saveChat } from "@/lib/chat-store";
+import { loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
 import { MCP_PREFIX, openMcp } from "@/lib/mcp";
-import { logRun, type LoggedCall } from "@/lib/runs";
+import { logRun, syncApprovals, type LoggedCall } from "@/lib/runs";
 import { activeTools, APPROVAL_TOOLS } from "@/lib/tools";
 
 export const maxDuration = 60;
@@ -14,13 +14,7 @@ export async function POST(req: Request) {
   const apiKey = getSetting("api_key") || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
 
-  // A resubmitted assistant message (after a form/choice answer) must replace its stored copy, never duplicate it:
-  // duplicate tool_use ids make Anthropic reject the request. Match by id, or by shared tool call id.
-  const callIds = (m: UIMessage) => m.parts.flatMap((p) => ("toolCallId" in p ? [p.toolCallId] : []));
-  const prev = loadChat(id);
-  const same = (m: UIMessage) =>
-    m.role === "assistant" && message.role === "assistant" && (m.id === message.id || callIds(m).some((c) => callIds(message).includes(c)));
-  const messages = prev.some(same) ? prev.map((m) => (same(m) ? message : m)) : [...prev, message];
+  const messages = mergeMessage(loadChat(id), message);
   const agent = getAgent(threadAgentId(id) ?? agentId); // a thread keeps the agent it started with
   const { tools, skills } = activeTools(agent && { tools: JSON.parse(agent.tools_json), skills: JSON.parse(agent.skills_json) });
   const mcp = await openMcp(agent ? JSON.parse(agent.mcp_json) : []);
@@ -38,6 +32,7 @@ export async function POST(req: Request) {
 
   const model = agent?.model || getSetting("model", DEFAULT_MODEL);
   const runId = generateId();
+  syncApprovals(runId, id, agent?.id, message); // the user's approve/deny click arrives with this request
   const started = Date.now();
   const calls: LoggedCall[] = [];
   const finish = async (status: "ok" | "error" | "aborted", usage?: { inputTokens?: number; outputTokens?: number }, error?: unknown) => {
@@ -75,7 +70,10 @@ export async function POST(req: Request) {
       stream: result.stream,
       originalMessages: messages,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }), // same id on client and in the DB
-      onEnd: ({ messages }) => saveChat(id, messages, agent?.id),
+      onEnd: ({ messages }) => {
+        saveChat(id, messages, agent?.id);
+        syncApprovals(runId, id, agent?.id, messages.at(-1)); // approval requests this run produced
+      },
     }),
   });
 }

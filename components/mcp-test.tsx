@@ -12,7 +12,7 @@ export function McpTest({ id }: { id: string }) {
       </button>
       {res && (
         <pre className="whitespace-pre-wrap rounded-md border border-line p-2 font-mono text-xs">
-          {res.ok ? "✓ connected\n" : "✗ failed: "}{res.text}
+          {res.ok ? "Connected\n" : "Failed: "}{res.text}
         </pre>
       )}
     </div>

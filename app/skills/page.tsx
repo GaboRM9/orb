@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export default function SkillsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-6">
-      <h1 className="text-lg font-semibold">Skills</h1>
+      <h1>Skills</h1>
       <p className="text-sm text-mute">The model sees only name + description, then calls <code>loadSkill</code> to read the full body when relevant.</p>
       {listSkills().map((s) => (
         <details key={s.id} className="rounded-lg border border-line p-4">
@@ -27,7 +27,7 @@ export default function SkillsPage() {
           </form>
         </details>
       ))}
-      <form action={saveSkill} className="space-y-2 rounded-lg border border-dashed border-line p-4">
+      <form action={saveSkill} className="space-y-2 rounded-lg border border-line p-4">
         <div className="text-sm font-medium">New skill</div>
         <input className="field" name="name" placeholder="kebab-case-name" required />
         <input className="field" name="description" placeholder="When should the model use it?" required />

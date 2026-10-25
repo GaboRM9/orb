@@ -16,6 +16,17 @@ function dedupe(ms: UIMessage[]) {
   });
 }
 
+/**
+ * Adds the incoming message to the stored history. An assistant message that resubmits itself (after a form answer or an
+ * approve/deny click) replaces its stored copy, matched by id or by shared tool call id; it must never duplicate it,
+ * because duplicate tool_use ids make Anthropic reject the request.
+ */
+export function mergeMessage(prev: UIMessage[], message: UIMessage): UIMessage[] {
+  const same = (m: UIMessage) =>
+    m.role === "assistant" && message.role === "assistant" && (m.id === message.id || callIds(m).some((c) => callIds(message).includes(c)));
+  return prev.some(same) ? prev.map((m) => (same(m) ? message : m)) : [...prev, message];
+}
+
 export function saveChat(id: string, messages: UIMessage[], agentId?: string | null) {
   const first = messages.find((m) => m.role === "user")?.parts.find((p) => p.type === "text");
   const title = (first && "text" in first ? first.text : "New chat").slice(0, 60);

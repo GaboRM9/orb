@@ -65,7 +65,7 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
               <div key={n} className={box}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="font-medium">{c?.title}</div>
-                  {c?.tag && <span className="rounded-full border border-line px-2 text-xs">{c.tag}</span>}
+                  {c?.tag && <span className="rounded-sm border border-line px-2 text-xs">{c.tag}</span>}
                 </div>
                 {c?.subtitle && <div className="text-xs text-mute">{c.subtitle}</div>}
                 <p className="mt-2 text-sm">{c?.body}</p>
@@ -104,7 +104,7 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
             {i.data.map((d, n) => (
               <div key={n} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3 text-xs">
                 <span className="truncate text-mute">{d?.label}</span>
-                <div className="h-2 rounded-full bg-line"><div className="h-2 rounded-full bg-fg transition-all" style={{ width: `${((d?.value ?? 0) / max) * 100}%` }} /></div>
+                <div className="h-2 bg-line"><div className="h-2 bg-fg transition-all" style={{ width: `${((d?.value ?? 0) / max) * 100}%` }} /></div>
                 <span className="font-mono">{d?.value}{i.unit ?? ""}</span>
               </div>
             ))}
@@ -140,7 +140,7 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
   return null;
 }
 
-const Skeleton = ({ label }: { label: string }) => <div className="animate-pulse rounded-lg border border-dashed border-line p-4 text-xs text-mute">{label}</div>;
+const Skeleton = ({ label }: { label: string }) => <div className="animate-pulse rounded-lg border border-line p-4 text-xs text-mute">{label}</div>;
 const Answered = ({ label, text }: { label: string; text: string }) => (
   <div className="rounded-lg border border-line px-3 py-2 text-xs"><span className="text-mute">{label} → </span>{text}</div>
 );

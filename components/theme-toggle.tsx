@@ -5,5 +5,5 @@ export function ThemeToggle() {
     const dark = document.documentElement.classList.toggle("dark");
     try { localStorage.theme = dark ? "dark" : "light"; } catch {}
   };
-  return <button className="btn w-full" onClick={flip}>Toggle theme</button>;
+  return <button className="btn w-full text-mute" onClick={flip}>Appearance</button>;
 }

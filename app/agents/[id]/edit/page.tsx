@@ -10,7 +10,7 @@ export default async function EditAgent({ params }: PageProps<"/agents/[id]/edit
   if (!agent) notFound();
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-6">
-      <h1 className="text-lg font-semibold">Edit {agent.name}</h1>
+      <h1>Edit {agent.name}</h1>
       <AgentForm agent={agent} />
     </div>
   );

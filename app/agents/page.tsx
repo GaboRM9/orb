@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 
 export default function AgentsPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
-      <h1 className="text-lg font-semibold">Agents</h1>
+    <div className="mx-auto max-w-3xl space-y-6 px-8 py-12">
+      <h1>Agents</h1>
       <p className="text-sm text-mute">Each agent is a persona with its own instructions, model, tools and skills. Open one to chat.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         {listAgents().map((a) => (
@@ -23,7 +23,7 @@ export default function AgentsPage() {
             <Link href={`/agents/${a.id}/edit`} className="btn relative z-10 ml-auto h-fit text-xs">Edit</Link>
           </div>
         ))}
-        <Link href="/agents/new" className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-line text-sm text-mute hover:border-fg hover:text-fg">
+        <Link href="/agents/new" className="flex min-h-24 items-center justify-center rounded-lg border border-line text-sm text-mute hover:border-fg hover:text-fg">
           + New agent
         </Link>
       </div>

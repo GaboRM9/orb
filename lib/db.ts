@@ -33,6 +33,11 @@ function init(existing?: Database.Database) {
     create table if not exists tool_calls (
       id integer primary key autoincrement, run_id text not null references runs(id) on delete cascade,
       name text not null, input text, output text, ms integer, error text);
+    create table if not exists approvals (
+      id integer primary key autoincrement, approval_id text unique not null, run_id text, decided_run text,
+      thread_id text not null, agent_id text, tool text not null, input text,
+      decision text not null default 'pending', automatic integer not null default 0, reason text,
+      requested integer not null, decided integer);
     create index if not exists runs_started on runs(started desc);
     create table if not exists settings (key text primary key, value text not null);
   `);
@@ -98,3 +103,8 @@ export type Run = {
   agent?: string | null; calls?: number;
 };
 export type ToolCall = { id: number; run_id: string; name: string; input: string | null; output: string | null; ms: number | null; error: string | null };
+export type Approval = {
+  id: number; approval_id: string; run_id: string | null; decided_run: string | null; thread_id: string; agent_id: string | null;
+  tool: string; input: string | null; decision: "pending" | "approved" | "denied"; automatic: number; reason: string | null;
+  requested: number; decided: number | null; agent?: string | null;
+};

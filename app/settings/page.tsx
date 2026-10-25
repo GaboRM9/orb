@@ -13,12 +13,12 @@ const models = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "cla
 const count = (sql: string) => (db.prepare(sql).get() as { c: number }).c;
 
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
-  const { tab = "ai", agent, status } = await searchParams;
+  const { tab = "ai", agent, status, view } = await searchParams;
   const one = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   const active = tabs.some(([k]) => k === tab) ? tab : "ai";
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
-      <h1 className="text-lg font-semibold">Settings</h1>
+      <h1>Settings</h1>
       <nav className="flex gap-1 border-b border-line">
         {tabs.map(([k, label]) => (
           <Link key={k} href={`/settings?tab=${k}`}
@@ -29,7 +29,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
       </nav>
       {active === "ai" && <AI />}
       {active === "integrations" && <Integrations />}
-      {active === "runs" && <RunsPanel agent={one(agent)} status={one(status)} />}
+      {active === "runs" && <RunsPanel view={one(view)} agent={one(agent)} status={one(status)} />}
       {active === "about" && <About />}
     </div>
   );
@@ -77,12 +77,12 @@ function Knowledge() {
     <section className="space-y-3 border-t border-line pt-6">
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-medium">Knowledge</h2>
-        <span className="rounded-full border border-line px-2 py-0.5 text-xs text-mute">Coming soon</span>
+        <span className="rounded-sm border border-line px-2 py-0.5 text-xs text-mute">Coming soon</span>
       </div>
       <p className="text-xs text-mute">Sync your documentation so agents can search and cite it. Sources will be attached per agent.</p>
       <div className="space-y-2">
         {sources.map(([name, detail]) => (
-          <div key={name} className="flex items-center justify-between gap-4 rounded-lg border border-dashed border-line p-4 opacity-60">
+          <div key={name} className="flex items-center justify-between gap-4 rounded-lg border border-line p-4 opacity-60">
             <div>
               <div className="text-sm font-medium">{name}</div>
               <div className="text-xs text-mute">{detail}</div>
@@ -102,7 +102,7 @@ function Row({ name, detail, on }: { name: string; detail: string; on: boolean }
         <div className="text-sm font-medium">{name}</div>
         <div className="text-xs text-mute">{detail}</div>
       </div>
-      <span className={`rounded-full border px-2 py-0.5 text-xs ${on ? "border-fg" : "border-line text-mute"}`}>{on ? "Connected" : "Not set"}</span>
+      <span className={`rounded-sm border px-2 py-0.5 text-xs ${on ? "border-fg" : "border-line text-mute"}`}>{on ? "Connected" : "Not set"}</span>
     </div>
   );
 }
@@ -137,7 +137,7 @@ function Integrations() {
           <McpTest id={m.id} />
         </div>
       ))}
-      <form action={saveMcp} className="space-y-2 rounded-lg border border-dashed border-line p-4">
+      <form action={saveMcp} className="space-y-2 rounded-lg border border-line p-4">
         <div className="text-sm font-medium">Add MCP server</div>
         <input className="field" name="name" placeholder="Name (e.g. docs)" required />
         <input className="field font-mono" name="url" placeholder="https://example.com/mcp" required />
