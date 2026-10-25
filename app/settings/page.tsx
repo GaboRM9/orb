@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { z } from "zod";
+import { logout } from "@/app/login/actions";
 import { clearKey, clearThreads, deleteMcp, saveMcp, saveSettings, toggleMcp, toggleTool } from "@/lib/actions";
 import { McpTest } from "@/components/mcp-test";
 import { RunsPanel } from "@/components/runs-panel";
@@ -20,7 +21,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const one = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   const active = tabs.some(([k]) => k === tab) ? tab : "ai";
   return (
-    <div className="mx-auto max-w-2xl space-y-6 px-8 py-12">
+    <div className="mx-auto max-w-3xl space-y-6 px-10 py-14">
       <h1>Settings</h1>
       <nav className="flex gap-1 border-b border-line">
         {tabs.map(([k, label]) => (
@@ -163,7 +164,10 @@ function About() {
           <div key={k} className="flex justify-between px-4 py-2"><dt className="text-mute">{k}</dt><dd className="font-mono">{val}</dd></div>
         ))}
       </dl>
-      <form action={clearThreads}><button className="btn">Delete all chats</button></form>
+      <div className="flex gap-2">
+        <form action={clearThreads}><button className="btn">Delete all chats</button></form>
+        <form action={logout}><button className="btn">Sign out</button></form>
+      </div>
     </div>
   );
 }

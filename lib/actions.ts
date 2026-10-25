@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAuth } from "./auth";
 import { db, setSetting } from "./db";
 import { allTools, disabledTools, toolNames } from "./tools";
 import { probeMcp } from "./mcp";
@@ -9,29 +10,34 @@ import type { McpServer } from "./db";
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 export async function saveSettings(f: FormData) {
+  await requireAuth();
   for (const k of ["model", "system_prompt"]) setSetting(k, s(f, k));
   if (s(f, "api_key")) setSetting("api_key", s(f, "api_key")); // blank keeps existing
   revalidatePath("/settings");
 }
 
 export async function clearKey() {
+  await requireAuth();
   db.prepare("delete from settings where key='api_key'").run();
   revalidatePath("/settings");
 }
 
 export async function clearThreads() {
+  await requireAuth();
   db.prepare("delete from threads").run();
-  redirect("/chat");
+  redirect("/agents");
 }
 
 // Runs and approvals are kept on purpose: deleting a chat must not erase the audit trail.
 export async function deleteThread(id: string, backTo: string) {
+  await requireAuth();
   db.prepare("delete from threads where id=?").run(id);
   revalidatePath("/", "layout");
   redirect(backTo);
 }
 
 export async function toggleTool(name: string) {
+  await requireAuth();
   if (!toolNames.includes(name as never)) return;
   const off = new Set(disabledTools());
   if (!off.delete(name)) off.add(name); // delete returns false when it wasn't there: toggle on
@@ -40,6 +46,7 @@ export async function toggleTool(name: string) {
 }
 
 export async function runTool(name: string, rawInput: string) {
+  await requireAuth();
   const t = allTools[name as keyof typeof allTools];
   if (!t) return "unknown tool";
   try {
@@ -52,6 +59,7 @@ export async function runTool(name: string, rawInput: string) {
 }
 
 export async function saveSkill(f: FormData) {
+  await requireAuth();
   const id = Number(f.get("id")) || null;
   const v = [s(f, "name"), s(f, "description"), s(f, "body"), JSON.stringify(f.getAll("tools"))];
   if (v.slice(0, 3).some((x) => !x)) return;
@@ -62,17 +70,20 @@ export async function saveSkill(f: FormData) {
 }
 
 export async function toggleSkill(id: number) {
+  await requireAuth();
   db.prepare("update skills set enabled = 1 - enabled where id=?").run(id);
   revalidatePath("/skills");
 }
 
 export async function deleteSkill(id: number) {
+  await requireAuth();
   db.prepare("delete from skills where id=?").run(id);
   revalidatePath("/skills");
   redirect("/skills");
 }
 
 export async function saveAgent(f: FormData) {
+  await requireAuth();
   const id = s(f, "id") || crypto.randomUUID().slice(0, 8);
   const name = s(f, "name");
   if (!name) return;
@@ -86,6 +97,7 @@ export async function saveAgent(f: FormData) {
 }
 
 export async function deleteAgent(id: string) {
+  await requireAuth();
   db.prepare("update threads set agent_id=null where agent_id=?").run(id);
   db.prepare("delete from agents where id=?").run(id);
   revalidatePath("/", "layout");
@@ -104,6 +116,7 @@ const validUrl = (u: string) => {
 };
 
 export async function saveMcp(f: FormData) {
+  await requireAuth();
   const name = s(f, "name");
   const url = s(f, "url");
   const auth = s(f, "auth");
@@ -115,11 +128,13 @@ export async function saveMcp(f: FormData) {
 }
 
 export async function toggleMcp(id: string) {
+  await requireAuth();
   db.prepare("update mcp_servers set enabled = 1 - enabled where id=?").run(id);
   revalidatePath("/settings");
 }
 
 export async function deleteMcp(id: string) {
+  await requireAuth();
   db.prepare("delete from mcp_servers where id=?").run(id);
   // detach from agents so they don't keep a dangling id
   for (const a of db.prepare("select id, mcp_json from agents").all() as { id: string; mcp_json: string }[]) {
@@ -130,6 +145,7 @@ export async function deleteMcp(id: string) {
 }
 
 export async function testMcp(id: string): Promise<{ ok: boolean; text: string }> {
+  await requireAuth();
   const srv = db.prepare("select * from mcp_servers where id=?").get(id) as McpServer | undefined;
   if (!srv) return { ok: false, text: "Server not found" };
   try {
