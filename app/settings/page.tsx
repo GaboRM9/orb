@@ -7,12 +7,12 @@ import { Tile, TileGrid } from "@/components/tile";
 import { ToolRunner } from "@/components/tool-runner";
 import { db, getSetting, listMcp, listSkills } from "@/lib/db";
 import { allTools, APPROVAL_TOOLS, disabledTools, toolNames } from "@/lib/tools";
+import { DEFAULT_MODEL, MODELS } from "@/lib/models";
 import pkg from "@/package.json";
 
 export const dynamic = "force-dynamic";
 
 const tabs = [["ai", "AI"], ["tools", "Tools"], ["integrations", "Integrations"], ["runs", "Runs"], ["about", "About"]] as const;
-const models = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
 const count = (sql: string) => (db.prepare(sql).get() as { c: number }).c;
 
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
@@ -50,8 +50,8 @@ function AI() {
         </label>
         <label className="block space-y-1 text-sm">
           <span>Model</span>
-          <select className="field" name="model" defaultValue={getSetting("model", "claude-sonnet-5-5")}>
-            {models.map((m) => <option key={m}>{m}</option>)}
+          <select className="field" name="model" defaultValue={getSetting("model", DEFAULT_MODEL)}>
+            {MODELS.map((m) => <option key={m}>{m}</option>)}
           </select>
         </label>
         <label className="block space-y-1 text-sm">

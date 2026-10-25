@@ -1,8 +1,8 @@
 import { deleteAgent, saveAgent } from "@/lib/actions";
 import { listMcp, listSkills, type Agent } from "@/lib/db";
+import { MODELS } from "@/lib/models";
 import { toolNames } from "@/lib/tools";
 
-const models = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
 
 export function AgentForm({ agent }: { agent?: Agent }) {
   const tools: string[] = agent ? JSON.parse(agent.tools_json) : [];
@@ -19,7 +19,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
         <span>Model</span>
         <select className="field" name="model" defaultValue={agent?.model ?? ""}>
           <option value="">Default (from Settings)</option>
-          {models.map((m) => <option key={m}>{m}</option>)}
+          {MODELS.map((m) => <option key={m}>{m}</option>)}
         </select>
       </label>
       <fieldset className="space-y-1 text-sm">
