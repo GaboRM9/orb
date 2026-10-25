@@ -9,24 +9,22 @@ export default function AgentsPage() {
     <div className="mx-auto max-w-3xl space-y-6 px-8 py-12">
       <h1>Agents</h1>
       <p className="text-sm text-mute">Each agent is a persona with its own instructions, model, tools and skills. Open one to chat.</p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="divide-y divide-line border-y border-line">
         {listAgents().map((a) => (
-          <div key={a.id} className="group relative flex gap-3 rounded-lg border border-line p-4 hover:border-fg">
-            <Avatar name={a.name} />
-            <div className="min-w-0">
+          <div key={a.id} className="group relative flex items-center gap-4 py-5">
+            <Avatar name={a.name} size="h-9 w-9 text-sm" />
+            <div className="min-w-0 flex-1">
               <Link href={`/agents/${a.id}`} className="font-medium after:absolute after:inset-0">{a.name}</Link>
-              <p className="text-sm text-mute">{a.description || "No description"}</p>
-              <p className="mt-1 font-mono text-xs text-mute">
-                {JSON.parse(a.tools_json).length} tools · {JSON.parse(a.skills_json).length} skills · {JSON.parse(a.mcp_json).length} MCP
-              </p>
+              <p className="truncate text-sm text-mute">{a.description || "No description"}</p>
             </div>
-            <Link href={`/agents/${a.id}/edit`} className="btn relative z-10 ml-auto h-fit text-xs">Edit</Link>
+            <p className="hidden font-mono text-xs text-mute sm:block">
+              {JSON.parse(a.tools_json).length} tools · {JSON.parse(a.skills_json).length} skills · {JSON.parse(a.mcp_json).length} MCP
+            </p>
+            <Link href={`/agents/${a.id}/edit`} className="relative z-10 text-xs text-mute hover:text-fg">Edit</Link>
           </div>
         ))}
-        <Link href="/agents/new" className="flex min-h-24 items-center justify-center rounded-lg border border-line text-sm text-mute hover:border-fg hover:text-fg">
-          + New agent
-        </Link>
       </div>
+      <Link href="/agents/new" className="inline-block text-sm text-mute hover:text-fg">+ New agent</Link>
     </div>
   );
 }

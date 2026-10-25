@@ -1,23 +1,26 @@
 import Link from "next/link";
-import { clearKey, clearThreads, deleteMcp, saveMcp, saveSettings, toggleMcp } from "@/lib/actions";
+import { z } from "zod";
+import { clearKey, clearThreads, deleteMcp, saveMcp, saveSettings, toggleMcp, toggleTool } from "@/lib/actions";
 import { McpTest } from "@/components/mcp-test";
 import { RunsPanel } from "@/components/runs-panel";
+import { Tile, TileGrid } from "@/components/tile";
+import { ToolRunner } from "@/components/tool-runner";
 import { db, getSetting, listMcp, listSkills } from "@/lib/db";
-import { disabledTools, toolNames } from "@/lib/tools";
+import { allTools, APPROVAL_TOOLS, disabledTools, toolNames } from "@/lib/tools";
 import pkg from "@/package.json";
 
 export const dynamic = "force-dynamic";
 
-const tabs = [["ai", "AI"], ["integrations", "Integrations"], ["runs", "Runs"], ["about", "About"]] as const;
+const tabs = [["ai", "AI"], ["tools", "Tools"], ["integrations", "Integrations"], ["runs", "Runs"], ["about", "About"]] as const;
 const models = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
 const count = (sql: string) => (db.prepare(sql).get() as { c: number }).c;
 
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
-  const { tab = "ai", agent, status, view } = await searchParams;
+  const { tab = "ai", agent, status, view, tool } = await searchParams;
   const one = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   const active = tabs.some(([k]) => k === tab) ? tab : "ai";
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6">
+    <div className="mx-auto max-w-2xl space-y-6 px-8 py-12">
       <h1>Settings</h1>
       <nav className="flex gap-1 border-b border-line">
         {tabs.map(([k, label]) => (
@@ -28,6 +31,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         ))}
       </nav>
       {active === "ai" && <AI />}
+      {active === "tools" && <Tools selected={one(tool)} />}
       {active === "integrations" && <Integrations />}
       {active === "runs" && <RunsPanel view={one(view)} agent={one(agent)} status={one(status)} />}
       {active === "about" && <About />}
@@ -160,6 +164,39 @@ function About() {
         ))}
       </dl>
       <form action={clearThreads}><button className="btn">Delete all chats</button></form>
+    </div>
+  );
+}
+
+function Tools({ selected }: { selected?: string }) {
+  const off = new Set(disabledTools());
+  const name = toolNames.find((n) => n === selected);
+  const t = name && allTools[name];
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-mute">Defined with <code>tool()</code> + zod. Enabled tools are available to the chat model.</p>
+      <TileGrid>
+        {toolNames.map((n) => (
+          <Tile key={n} href={`/settings?tab=tools&tool=${n}`} title={n} active={n === name}
+            desc={typeof allTools[n].description === "string" ? allTools[n].description : ""}
+            tag={[off.has(n) ? "Off" : "On", APPROVAL_TOOLS.has(n) && "asks approval"].filter(Boolean).join(" · ")} />
+        ))}
+      </TileGrid>
+      {name && t && (
+        <section className="space-y-3 border-t border-line pt-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="font-mono text-sm">{name}</div>
+            <form action={toggleTool.bind(null, name)}>
+              <button className={off.has(name) ? "btn" : "btn-solid"}>{off.has(name) ? "Off" : "On"}</button>
+            </form>
+          </div>
+          <details className="text-xs">
+            <summary className="cursor-pointer text-mute">input schema</summary>
+            <pre className="mt-2 overflow-x-auto font-mono">{JSON.stringify(z.toJSONSchema(t.inputSchema as z.ZodType), null, 2)}</pre>
+          </details>
+          <ToolRunner name={name} />
+        </section>
+      )}
     </div>
   );
 }

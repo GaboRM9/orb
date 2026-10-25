@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"; // sidebar lists saved chats
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-export const metadata: Metadata = { title: "AI Showcase", description: "Minimal AI SDK v7 showcase" };
+export const metadata: Metadata = { title: "orb", description: "A calm, minimal agent workspace" };
 
 // Applies saved theme (or OS preference) before paint to avoid a flash.
 const themeScript = `try{var t=localStorage.theme;if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}`;
