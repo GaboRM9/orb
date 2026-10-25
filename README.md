@@ -1,4 +1,4 @@
-# orb
+# orbz
 
 A calm, minimal agent workspace (AI SDK v7): chat, tools, skills, settings. SQLite storage, Anthropic models.
 

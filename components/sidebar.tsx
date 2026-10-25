@@ -20,7 +20,7 @@ export function Sidebar({ threads, agents }: { threads: Thread[]; agents: Agent[
   return (
     <aside className="flex w-64 shrink-0 flex-col justify-between border-r border-line p-5">
       <div className="flex min-h-0 flex-col">
-        <div className="mb-10 flex items-center gap-2.5 px-2 font-mono text-base font-light tracking-[0.3em]"><OrbIcon className="h-6 w-6" />orb</div>
+        <div className="mb-10 flex items-center gap-2.5 px-2 font-mono text-base font-light tracking-[0.3em]"><OrbIcon className="h-6 w-6" />orbz</div>
         <nav className="flex min-h-0 flex-col gap-1 overflow-y-auto">
           {nav.map(([label, href, Icon]) => (
             <div key={href} className="flex min-h-0 flex-col gap-0.5">
