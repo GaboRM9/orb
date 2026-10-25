@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Showcase
 
-## Getting Started
+Minimal AI SDK v7 demo: chat, tools, skills, settings. SQLite storage, Anthropic models.
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
+npm i && npm run dev -- -p 3100
+```
+Add your key in Settings (or `ANTHROPIC_API_KEY` in `.env.local`).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Generative UI tools (`lib/ui-tools.ts`, rendered in `components/gen-ui.tsx`)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Tool | Kind | Renders |
+|---|---|---|
+| `askUser` | client (no `execute`) | form: text / number / select / toggle |
+| `choose` | client | option buttons (also confirm/deny) |
+| `showPlan` | render | step checklist |
+| `showCards` | render | card grid |
+| `showTable` | render | table |
+| `showChart` | render | bar chart |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Client tools stop the model loop; the answer is sent with `addToolOutput` and
+`sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls` resumes it.
 
-## Learn More
+## Test prompts
 
-To learn more about Next.js, take a look at the following resources:
+Everything:
+> Plan a 3-day trip for me. First ask me a form with: destination, budget (number), travel style (select: relaxed/adventure) and a toggle for "include flights". Then show your plan as a checklist, the day-by-day itinerary as cards, a cost breakdown as a table and a bar chart of spend per category. Finally ask me to pick one of 3 upgrade options.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Just a form → cards: "Ask me a form for my favorite language, years of experience (number) and remote (toggle), then show 3 learning-path cards."
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Confirm flow: "I want to delete all my notes. Ask me to confirm first."
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Multi-step + tools + UI: "Get the time in America/Merida, calculate 17% of 2340, then show both results in a table and a chart."

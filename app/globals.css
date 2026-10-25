@@ -1,26 +1,23 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root { --bg: #fff; --fg: #000; --mute: #737373; --line: #e5e5e5; }
+.dark { --bg: #000; --fg: #fff; --mute: #a3a3a3; --line: #262626; }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-mute: var(--mute);
+  --color-line: var(--line);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-sans), system-ui, sans-serif; }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .field { @apply w-full rounded-md border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-fg; }
+  .btn { @apply rounded-md border border-line px-3 py-1.5 text-sm hover:border-fg disabled:opacity-40; }
+  .btn-solid { @apply rounded-md border border-fg bg-fg px-3 py-1.5 text-sm text-bg disabled:opacity-40; }
 }
