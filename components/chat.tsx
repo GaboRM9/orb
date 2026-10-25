@@ -35,12 +35,14 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
   });
   const busy = status === "submitted" || status === "streaming";
 
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [messages]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "end" });
+  }, [messages]);
 
   return (
-    <div className="mx-auto flex h-full max-w-2xl flex-col px-4">
+    <div className="mx-auto flex h-full max-w-3xl flex-col px-6">
       {agent && (
-        <header className="flex items-center gap-3 border-b border-line py-3">
+        <header className="flex items-center gap-3 border-b border-line py-4">
           <Avatar name={agent.name} size="h-9 w-9 text-sm" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium">{agent.name}</div>
@@ -59,7 +61,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
         )}
         {messages.map((m) => (
           <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
-            <div className={`space-y-2 text-sm leading-6 ${m.role === "user" ? "max-w-[85%] rounded-lg border border-line px-3 py-2" : ""}`}>
+            <div className={`space-y-2 text-[15px] leading-7 ${m.role === "user" ? "max-w-[85%] rounded-lg border border-line px-3 py-2" : ""}`}>
               {m.parts.map((p, i) => {
                 if (p.type === "text") return <p key={i} className="whitespace-pre-wrap">{p.text}</p>;
                 if (isToolUIPart(p) && p.state === "approval-requested" && !p.approval.isAutomatic) {
@@ -103,7 +105,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
         <div ref={end} />
       </div>
       <form
-        className="flex gap-2 pb-6"
+        className="flex gap-2 pb-8"
         onSubmit={(e) => {
           e.preventDefault();
           if (!input.trim() || busy) return;

@@ -17,13 +17,14 @@
   --radius-lg: 2px; /* one near-square radius everywhere */
 }
 
+html { font-size: 106.25%; } /* 17px root: every rem-based size scales up together */
 body { background: var(--bg); color: var(--fg); font-family: var(--font-sans), system-ui, sans-serif; letter-spacing: -0.006em; }
-h1 { font-size: 1.75rem; font-weight: 300; letter-spacing: -0.03em; }
+h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
 ::selection { background: var(--fg); color: var(--bg); }
 :focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
 
 @layer components {
-  .field { @apply w-full rounded-md border border-line bg-bg px-3 py-2 text-sm outline-none transition-colors focus:border-fg; }
-  .btn { @apply rounded-md border border-line px-3 py-1.5 text-sm transition-colors hover:border-fg disabled:opacity-40; }
-  .btn-solid { @apply rounded-md border border-fg bg-fg px-3 py-1.5 text-sm text-bg transition-opacity hover:opacity-80 disabled:opacity-40; }
+  .field { @apply w-full rounded-md border border-line bg-bg px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-fg; }
+  .btn { @apply rounded-md border border-line px-4 py-2 text-sm transition-colors hover:border-fg disabled:opacity-40; }
+  .btn-solid { @apply rounded-md border border-fg bg-fg px-4 py-2 text-sm text-bg transition-opacity hover:opacity-80 disabled:opacity-40; }
 }

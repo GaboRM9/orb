@@ -57,6 +57,8 @@ function init(existing?: Database.Database) {
     );
   if (!(db.prepare("select count(*) c from agents").get() as { c: number }).c) {
     const ins = db.prepare("insert into agents (id,name,description,instructions,tools_json,skills_json) values (?,?,?,?,?,?)");
+    ins.run("assistant", "Assistant", "General-purpose helper. Start here.",
+      "You are a helpful, concise assistant.", JSON.stringify(["getTime", "calculate"]), JSON.stringify([]));
     ins.run("ada", "Ada", "Research analyst. Fast, factual, shows her math.",
       "You are Ada, a precise research analyst. Verify facts with tools, show calculations, and present results with tables or charts.",
       JSON.stringify(["getTime", "calculate", "fetchUrl"]), JSON.stringify(["concise-writer"]));

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default function AgentsPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-8 py-12">
+    <div className="mx-auto max-w-3xl space-y-6 px-10 py-14">
       <h1>Agents</h1>
       <p className="text-sm text-mute">Each agent is a persona with its own instructions, model, tools and skills. Open one to chat.</p>
       <div className="divide-y divide-line border-y border-line">
