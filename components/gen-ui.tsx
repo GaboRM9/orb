@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { uiTools } from "@/lib/ui-tools";
 
 export type ChatMessage = UIMessage<never, never, InferUITools<typeof uiTools>>;
-export type AddOutput = (a: { tool: string; toolCallId: string; output: unknown }) => void;
+type AddOutput = (a: { tool: string; toolCallId: string; output: unknown }) => void;
 type Part = ChatMessage["parts"][number];
 
 const box = "rounded-lg border border-line p-4";

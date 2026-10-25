@@ -86,7 +86,7 @@ export const setSetting = (k: string, v: string) =>
   db.prepare("insert into settings (key,value) values (?,?) on conflict(key) do update set value=excluded.value").run(k, v);
 
 export type Thread = { id: string; title: string; updated: number; agent_id: string | null; agent: string | null };
-export type Skill = { id: number; name: string; description: string; body: string; enabled: number; tools_json: string; source: "user" | "agent" };
+type Skill = { id: number; name: string; description: string; body: string; enabled: number; tools_json: string; source: "user" | "agent" };
 export type Agent = { id: string; name: string; description: string; instructions: string; model: string; tools_json: string; skills_json: string; mcp_json: string };
 export const listThreads = () =>
   db.prepare("select t.*, a.name agent from threads t left join agents a on a.id=t.agent_id order by t.updated desc").all() as Thread[];

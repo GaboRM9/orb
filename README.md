@@ -11,12 +11,14 @@ Add your key in Settings (or `ANTHROPIC_API_KEY` in `.env.local`).
 
 | Tool | Kind | Renders |
 |---|---|---|
-| `askUser` | client (no `execute`) | form: text / number / select / toggle |
+| `askUser` | client (no `execute`) | form: text / number / select / toggle / slider / date / color |
 | `choose` | client | option buttons (also confirm/deny) |
 | `showPlan` | render | step checklist |
 | `showCards` | render | card grid |
 | `showTable` | render | table |
 | `showChart` | render | bar chart |
+| `showTimeline` | render | vertical timeline |
+| `showMap` | render | map with places |
 
 Client tools stop the model loop; the answer is sent with `addToolOutput` and
 `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls` resumes it.

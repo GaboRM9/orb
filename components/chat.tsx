@@ -3,13 +3,13 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, lastAssistantMessageIsCompleteWithApprovalResponses, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { renderUiPart, type ChatMessage } from "./gen-ui";
 
-export const TEST_UI = `Test UI: build me a weekend trip planner. (1) Ask me a form with destination (text), budget (slider 200-5000), start date (date), accent color (color) and a toggle for "include flights". (2) Show your plan as a checklist. (3) Show the places on a map with accurate coordinates. (4) Show the day-by-day schedule as a timeline. (5) Show a cost breakdown as a table and a bar chart of spend per category. (6) Show 3 hotel options as cards. (7) Finally ask me to pick one upgrade option.`;
+const TEST_UI = `Test UI: build me a weekend trip planner. (1) Ask me a form with destination (text), budget (slider 200-5000), start date (date), accent color (color) and a toggle for "include flights". (2) Show your plan as a checklist. (3) Show the places on a map with accurate coordinates. (4) Show the day-by-day schedule as a timeline. (5) Show a cost breakdown as a table and a bar chart of spend per category. (6) Show 3 hotel options as cards. (7) Finally ask me to pick one upgrade option.`;
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "./avatar";
 
-export type ChatAgent = { id: string; name: string; description: string };
+type ChatAgent = { id: string; name: string; description: string };
 
 export function Chat({ id, initialMessages, agent }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent }) {
   const router = useRouter();
