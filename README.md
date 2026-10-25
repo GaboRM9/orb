@@ -5,7 +5,7 @@ A calm, minimal agent workspace (AI SDK v7): chat, tools, skills, settings. SQLi
 ```
 npm i && npm run dev -- -p 3100
 ```
-Add your key in Settings (or `ANTHROPIC_API_KEY` in `.env.local`).
+Set `ADMIN_PASSWORD` in `.env.local` (see `.env.example`); without it nobody can sign in. Add your Anthropic key in Settings (or `ANTHROPIC_API_KEY` in `.env.local`).
 
 ## Generative UI tools (`lib/ui-tools.ts`, rendered in `components/gen-ui.tsx`)
 
