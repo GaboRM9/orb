@@ -22,6 +22,16 @@ export function logRun(r: {
   })();
 }
 
+/** Headline numbers for the Runs tab: runs today, errors today, approvals waiting on a decision. */
+export const runSummary = () => {
+  const today = new Date().setHours(0, 0, 0, 0);
+  return db.prepare(
+    `select (select count(*) from runs where started >= ?) runs,
+            (select count(*) from runs where started >= ? and status = 'error') errors,
+            (select count(*) from approvals where decision = 'pending') pending`,
+  ).get(today, today) as { runs: number; errors: number; pending: number };
+};
+
 export const listRuns = (agent?: string, status?: string) =>
   db.prepare(
     `select r.*, a.name agent, (select count(*) from tool_calls c where c.run_id=r.id) calls

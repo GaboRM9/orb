@@ -108,6 +108,21 @@ describe("approval log", () => {
   });
 });
 
+describe("run summary", () => {
+  const run = (id: string, started: number, status: "ok" | "error") => runs.logRun({ id, threadId: "th", model: "m", started, status, calls: [] });
+  it("counts today's runs and errors, skips older ones, and counts pending approvals", () => {
+    const base = runs.runSummary();
+    run("s1", Date.now(), "ok");
+    run("s2", Date.now(), "error");
+    run("s3", Date.now() - 2 * 86_400_000, "error"); // two days ago: not "today"
+    runs.syncApprovals("s1", "th", "ada", { id: "m", role: "assistant", parts: [{ type: "tool-fetchUrl", input: { url: "https://example.com" }, approval: { id: "ap-summary" } }] } as unknown as UIMessage);
+    const now = runs.runSummary();
+    assert.equal(now.runs - base.runs, 2);
+    assert.equal(now.errors - base.errors, 1);
+    assert.equal(now.pending - base.pending, 1);
+  });
+});
+
 describe("POST /api/chat", () => {
   it("asks for an API key when none is set", async () => {
     const res = await post({ id: "t0", message: user("u1", "hi") });

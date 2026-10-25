@@ -21,7 +21,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const one = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   const active = tabs.some(([k]) => k === tab) ? tab : "ai";
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-10 py-14">
+    <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Settings</h1>
       <nav className="flex gap-1 border-b border-line">
         {tabs.map(([k, label]) => (

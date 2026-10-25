@@ -9,7 +9,7 @@ export default async function EditAgent({ params }: PageProps<"/agents/[id]/edit
   const agent = getAgent(id);
   if (!agent) notFound();
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-10 py-14">
+    <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Edit {agent.name}</h1>
       <AgentForm agent={agent} />
     </div>

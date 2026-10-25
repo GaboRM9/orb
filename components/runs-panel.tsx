@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listAgents, type Run } from "@/lib/db";
-import { listApprovals, listRuns } from "@/lib/runs";
+import { listApprovals, listRuns, runSummary } from "@/lib/runs";
 
 const fmt = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
 const pill = (on: boolean) => `rounded-sm border px-2.5 py-0.5 text-xs ${on ? "border-fg bg-fg text-bg" : "border-line text-mute hover:text-fg"}`;
@@ -11,8 +11,17 @@ export function RunsPanel({ view, agent, status }: { view?: string; agent?: stri
   const href = (o: { view?: string; agent?: string; status?: string }) =>
     `/settings?${new URLSearchParams({ tab: "runs", ...(o.view && { view: o.view }), ...(o.agent && { agent: o.agent }), ...(o.status && { status: o.status }) })}`;
   const statuses = approvals ? ["pending", "approved", "denied"] : ["ok", "error", "aborted"];
+  const s = runSummary();
   return (
     <div className="space-y-4">
+      <dl className="grid grid-cols-3 gap-px border border-line bg-line">
+        {([["Runs today", s.runs], ["Errors today", s.errors], ["Waiting for approval", s.pending]] as const).map(([label, n]) => (
+          <div key={label} className="bg-bg p-4">
+            <dt className="text-xs text-mute">{label}</dt>
+            <dd className="mt-1 text-2xl font-light">{n}</dd>
+          </div>
+        ))}
+      </dl>
       <div className="flex gap-1 border-b border-line">
         {[["Runs", undefined], ["Approvals", "approvals"]].map(([label, v]) => (
           <Link key={label} href={href({ view: v })} className={`-mb-px border-b px-3 py-1.5 text-sm ${(v === "approvals") === approvals ? "border-fg" : "border-transparent text-mute hover:text-fg"}`}>{label}</Link>
