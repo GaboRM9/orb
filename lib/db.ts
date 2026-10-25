@@ -43,6 +43,8 @@ function init(existing?: Database.Database) {
   `);
   if (!(db.pragma("table_info(agents)") as { name: string }[]).some((c) => c.name === "mcp_json"))
     db.exec("alter table agents add column mcp_json text not null default '[]'");
+  for (const [col, ddl] of [["tools_json", "text not null default '[]'"], ["source", "text not null default 'user'"]])
+    if (!(db.pragma("table_info(skills)") as { name: string }[]).some((c) => c.name === col)) db.exec(`alter table skills add column ${col} ${ddl}`);
   if (!(db.pragma("table_info(threads)") as { name: string }[]).some((c) => c.name === "agent_id"))
     db.exec("alter table threads add column agent_id text");
   db.exec("delete from messages where thread_id not in (select id from threads)"); // orphans from before FKs were on
@@ -84,7 +86,7 @@ export const setSetting = (k: string, v: string) =>
   db.prepare("insert into settings (key,value) values (?,?) on conflict(key) do update set value=excluded.value").run(k, v);
 
 export type Thread = { id: string; title: string; updated: number; agent_id: string | null; agent: string | null };
-export type Skill = { id: number; name: string; description: string; body: string; enabled: number };
+export type Skill = { id: number; name: string; description: string; body: string; enabled: number; tools_json: string; source: "user" | "agent" };
 export type Agent = { id: string; name: string; description: string; instructions: string; model: string; tools_json: string; skills_json: string; mcp_json: string };
 export const listThreads = () =>
   db.prepare("select t.*, a.name agent from threads t left join agents a on a.id=t.agent_id order by t.updated desc").all() as Thread[];

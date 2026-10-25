@@ -36,7 +36,7 @@ export async function toggleTool(name: string) {
   const off = new Set(disabledTools());
   if (!off.delete(name)) off.add(name); // delete returns false when it wasn't there: toggle on
   setSetting("tools_disabled", JSON.stringify([...off]));
-  revalidatePath("/tools");
+  revalidatePath("/settings");
 }
 
 export async function runTool(name: string, rawInput: string) {
@@ -53,11 +53,12 @@ export async function runTool(name: string, rawInput: string) {
 
 export async function saveSkill(f: FormData) {
   const id = Number(f.get("id")) || null;
-  const v = [s(f, "name"), s(f, "description"), s(f, "body")];
-  if (v.some((x) => !x)) return;
-  if (id) db.prepare("update skills set name=?,description=?,body=? where id=?").run(...v, id);
-  else db.prepare("insert into skills (name,description,body) values (?,?,?) on conflict(name) do update set description=excluded.description, body=excluded.body").run(...v);
+  const v = [s(f, "name"), s(f, "description"), s(f, "body"), JSON.stringify(f.getAll("tools"))];
+  if (v.slice(0, 3).some((x) => !x)) return;
+  if (id) db.prepare("update skills set name=?,description=?,body=?,tools_json=? where id=?").run(...v, id);
+  else db.prepare("insert into skills (name,description,body,tools_json) values (?,?,?,?) on conflict(name) do update set description=excluded.description, body=excluded.body, tools_json=excluded.tools_json").run(...v);
   revalidatePath("/skills");
+  redirect("/skills");
 }
 
 export async function toggleSkill(id: number) {
@@ -68,6 +69,7 @@ export async function toggleSkill(id: number) {
 export async function deleteSkill(id: number) {
   db.prepare("delete from skills where id=?").run(id);
   revalidatePath("/skills");
+  redirect("/skills");
 }
 
 export async function saveAgent(f: FormData) {
