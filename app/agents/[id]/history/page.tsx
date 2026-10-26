@@ -14,7 +14,7 @@ export default async function History({ params }: PageProps<"/agents/[id]/histor
     .prepare("select id, title, updated, (select json_array_length(json) from messages m where m.thread_id=t.id) n from threads t where agent_id=? order by updated desc")
     .all(id) as { id: string; title: string; updated: number; n: number | null }[];
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-6">
+    <div className="mx-auto max-w-3xl space-y-6 px-10 py-14">
       <div className="flex items-center gap-3">
         <Avatar name={agent.name} size="h-9 w-9 text-sm" />
         <h1 className="flex-1">{agent.name} · History</h1>

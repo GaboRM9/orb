@@ -57,6 +57,8 @@ function init(existing?: Database.Database) {
     );
   if (!(db.prepare("select count(*) c from agents").get() as { c: number }).c) {
     const ins = db.prepare("insert into agents (id,name,description,instructions,tools_json,skills_json) values (?,?,?,?,?,?)");
+    ins.run("assistant", "Assistant", "General-purpose helper. Start here.",
+      "You are a helpful, concise assistant.", JSON.stringify(["getTime", "calculate"]), JSON.stringify([]));
     ins.run("ada", "Ada", "Research analyst. Fast, factual, shows her math.",
       "You are Ada, a precise research analyst. Verify facts with tools, show calculations, and present results with tables or charts.",
       JSON.stringify(["getTime", "calculate", "fetchUrl"]), JSON.stringify(["concise-writer"]));
@@ -85,11 +87,11 @@ export const getSetting = (k: string, d = "") =>
 export const setSetting = (k: string, v: string) =>
   db.prepare("insert into settings (key,value) values (?,?) on conflict(key) do update set value=excluded.value").run(k, v);
 
-export type Thread = { id: string; title: string; updated: number; agent_id: string | null; agent: string | null };
+export type Thread = { id: string; title: string; updated: number };
 type Skill = { id: number; name: string; description: string; body: string; enabled: number; tools_json: string; source: "user" | "agent" };
 export type Agent = { id: string; name: string; description: string; instructions: string; model: string; tools_json: string; skills_json: string; mcp_json: string };
 export const listThreads = () =>
-  db.prepare("select t.*, a.name agent from threads t left join agents a on a.id=t.agent_id order by t.updated desc").all() as Thread[];
+  db.prepare("select id, title, updated from threads order by updated desc").all() as Thread[];
 export const listSkills = () => db.prepare("select * from skills order by name").all() as Skill[];
 export const listAgents = () => db.prepare("select * from agents order by name").all() as Agent[];
 export const getAgent = (id: string | null | undefined) =>

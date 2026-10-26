@@ -10,6 +10,7 @@ import type { UIMessage } from "ai";
 // Temp DB + fake Anthropic API, set up before the app modules are imported.
 process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "showcase-")), "test.db");
 delete process.env.ANTHROPIC_API_KEY;
+process.env.ADMIN_PASSWORD = "test-pass";
 
 const seen: { system: string; tools: string[] }[] = [];
 const fake = http.createServer((req, res) => {
@@ -40,17 +41,19 @@ let dbm: typeof import("../lib/db");
 let runs: typeof import("../lib/runs");
 let net: typeof import("../lib/net-safe");
 let route: typeof import("../app/api/chat/route");
+let auth: typeof import("../lib/auth");
 
 before(async () => {
   await new Promise<void>((r) => fake.listen(0, r));
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${(fake.address() as AddressInfo).port}/v1`;
-  [store, dbm, runs, net, route] = await Promise.all([
-    import("../lib/chat-store"), import("../lib/db"), import("../lib/runs"), import("../lib/net-safe"), import("../app/api/chat/route"),
+  [store, dbm, runs, net, route, auth] = await Promise.all([
+    import("../lib/chat-store"), import("../lib/db"), import("../lib/runs"), import("../lib/net-safe"), import("../app/api/chat/route"), import("../lib/auth"),
   ]);
 });
 after(() => fake.close());
 
-const post = (body: object) => route.POST(new Request("http://x/api/chat", { method: "POST", body: JSON.stringify(body) }));
+const post = (body: object, cookie = `${auth.COOKIE}=${auth.makeToken()}`) =>
+  route.POST(new Request("http://x/api/chat", { method: "POST", headers: { cookie }, body: JSON.stringify(body) }));
 
 describe("mergeMessage", () => {
   it("appends a new message", () => {
@@ -105,6 +108,21 @@ describe("approval log", () => {
   });
 });
 
+describe("run summary", () => {
+  const run = (id: string, started: number, status: "ok" | "error") => runs.logRun({ id, threadId: "th", model: "m", started, status, calls: [] });
+  it("counts today's runs and errors, skips older ones, and counts pending approvals", () => {
+    const base = runs.runSummary();
+    run("s1", Date.now(), "ok");
+    run("s2", Date.now(), "error");
+    run("s3", Date.now() - 2 * 86_400_000, "error"); // two days ago: not "today"
+    runs.syncApprovals("s1", "th", "ada", { id: "m", role: "assistant", parts: [{ type: "tool-fetchUrl", input: { url: "https://example.com" }, approval: { id: "ap-summary" } }] } as unknown as UIMessage);
+    const now = runs.runSummary();
+    assert.equal(now.runs - base.runs, 2);
+    assert.equal(now.errors - base.errors, 1);
+    assert.equal(now.pending - base.pending, 1);
+  });
+});
+
 describe("POST /api/chat", () => {
   it("asks for an API key when none is set", async () => {
     const res = await post({ id: "t0", message: user("u1", "hi") });
@@ -135,5 +153,23 @@ describe("POST /api/chat", () => {
     await res.text();
     assert.match(seen.at(-1)!.system, /precise research analyst/);
     assert.equal(store.loadChat("t1").length, 4);
+  });
+});
+
+describe("auth", () => {
+  it("rejects chat requests without a valid session", async () => {
+    assert.equal((await post({ id: "a", message: {} }, "")).status, 401);
+    assert.equal((await post({ id: "a", message: {} }, `${auth.COOKIE}=${auth.makeToken()}x`)).status, 401);
+  });
+  it("accepts only the right password, and fails closed when none is set", () => {
+    assert.ok(auth.passwordOk("test-pass"));
+    assert.ok(!auth.passwordOk("nope"));
+    const [exp] = auth.makeToken().split(".");
+    assert.ok(!auth.verifyToken(`${exp}.forged`));
+    assert.ok(!auth.verifyToken(`1.${auth.makeToken().split(".")[1]}`)); // expired
+    const saved = process.env.ADMIN_PASSWORD;
+    delete process.env.ADMIN_PASSWORD;
+    assert.ok(!auth.verifyToken(auth.makeToken()));
+    process.env.ADMIN_PASSWORD = saved;
   });
 });

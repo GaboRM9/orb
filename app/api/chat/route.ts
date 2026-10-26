@@ -1,5 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { convertToModelMessages, createIdGenerator, createUIMessageStreamResponse, generateId, isStepCount, streamText, toUIMessageStream, type UIMessage } from "ai";
+import { requestAuthed } from "@/lib/auth";
 import { getAgent, getSetting, threadAgentId } from "@/lib/db";
 import { loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
 import { DEFAULT_MODEL } from "@/lib/models";
@@ -10,6 +11,7 @@ import { activeTools, APPROVAL_TOOLS } from "@/lib/tools";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  if (!requestAuthed(req)) return new Response("Unauthorized", { status: 401 });
   const { id, message, agentId }: { id: string; message: UIMessage; agentId?: string } = await req.json();
   const apiKey = getSetting("api_key") || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
