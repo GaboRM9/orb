@@ -166,6 +166,26 @@ describe("POST /api/chat", () => {
     assert.equal(res.status, 400);
   });
 
+  it("generative UI is a switch: off means no UI tools and no UI rules", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    const ask = async (thread: string) => {
+      await (await post({ id: thread, message: user(`${thread}-u`, "ping") })).text();
+      return seen.at(-1)!;
+    };
+    let sent = await ask("genui-on");
+    assert.ok(sent.tools.includes("answerVerdict") && sent.tools.includes("open_directions"));
+    assert.match(sent.system, /How to answer/);
+    await dbm.setSetting("gen_ui", "off");
+    try {
+      sent = await ask("genui-off");
+      assert.ok(!sent.tools.some((t) => t.startsWith("answer") || t.startsWith("show") || t.startsWith("open_") || t === "askUser" || t === "choose"));
+      assert.ok(sent.tools.includes("getTime"), "ordinary tools stay");
+      assert.doesNotMatch(sent.system, /How to answer/);
+    } finally {
+      await dbm.setSetting("gen_ui", "on");
+    }
+  });
+
   it("runs the agent: its instructions and tools only, saves the thread, logs the run", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     const res = await post({ id: "t1", agentId: "ada", message: user("u1", "ping") });

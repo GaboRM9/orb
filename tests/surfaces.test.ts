@@ -70,7 +70,7 @@ describe("surfaces", () => {
       return new Response(JSON.stringify(missing ? [] : [{ display_name: "Sol, Madrid, Spain", lat: "40.4", lon: "-3.7" }]));
     }) as typeof fetch;
     try {
-      const [a, b] = await Promise.all([geocode("Sol, Madrid"), geocode("Retiro, Madrid")]);
+      const [a] = await Promise.all([geocode("Sol, Madrid"), geocode("Retiro, Madrid")]);
       assert.equal(a.name, "Sol, Madrid");
       assert.ok(calls[1] - calls[0] >= 950, `second call came ${calls[1] - calls[0]}ms after the first`);
       await geocode("  sol, MADRID "); // same place, other spelling: no new request

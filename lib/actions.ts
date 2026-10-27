@@ -20,6 +20,12 @@ export async function saveSettings(f: FormData) {
   revalidatePath("/settings");
 }
 
+export async function saveGenUi(f: FormData) {
+  await requireAuth();
+  await setSetting("gen_ui", s(f, "gen_ui") === "off" ? "off" : "on");
+  revalidatePath("/settings");
+}
+
 // merges whichever theme fields the form sends; parseTheme drops anything malformed
 export async function saveTheme(f: FormData) {
   await requireAuth();
