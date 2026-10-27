@@ -1,5 +1,24 @@
-import type { UIMessage } from "ai";
+import { pruneMessages, type ModelMessage, type UIMessage } from "ai";
 import { db } from "./db";
+
+// ponytail: ~4 chars per token; swap for a real token count if the budget needs to be exact
+const BUDGET_CHARS = 400_000; // ~100k tokens: leaves room for tools, the reply and this run's tool output
+
+/**
+ * Keeps a conversation inside the context budget. Under budget it is sent untouched, so the cached prefix stays valid.
+ * Over budget: old tool calls/results and reasoning go first, then the oldest turns, always cutting at a user message.
+ */
+export function fitContext(messages: ModelMessage[], budget = BUDGET_CHARS) {
+  const size = (m: ModelMessage[]) => JSON.stringify(m).length;
+  if (size(messages) <= budget) return messages;
+  let out = pruneMessages({ messages, reasoning: "before-last-message", toolCalls: "before-last-4-messages", emptyMessages: "remove" });
+  while (size(out) > budget) {
+    const next = out.findIndex((m, i) => i > 0 && m.role === "user");
+    if (next < 0) break; // one huge turn left: send it and let the provider report the limit
+    out = out.slice(next);
+  }
+  return out;
+}
 
 export async function loadChat(id: string): Promise<UIMessage[]> {
   const r = (await db.prepare("select json from messages where thread_id=?").get(id)) as { json: string } | undefined;
