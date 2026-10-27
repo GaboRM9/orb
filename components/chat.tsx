@@ -5,11 +5,15 @@ import { renderUiPart, type ChatMessage } from "./gen-ui";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, OrbIcon, StopIcon } from "./icons";
+import { ArrowUpIcon, StopIcon } from "./icons";
 
 type ChatAgent = { id: string; name: string; description: string };
 
 // plain-language labels for built-in tools; anything else (MCP tools) shows its own name
+// the opening line of an empty chat; picked from the chat id so server and client render the same one
+const greetings = ["What are we working on?", "Where should we start?", "What's on your mind?", "Ready when you are.", "What can I take off your plate?"];
+const greetingFor = (id: string) => greetings[[...id].reduce((h, c) => h + c.charCodeAt(0), 0) % greetings.length];
+
 const verbs: Record<string, [running: string, done: string]> = {
   getTime: ["Checking the time", "Checked the time"],
   calculate: ["Calculating", "Calculated"],
@@ -80,6 +84,8 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
   const busy = status === "submitted" || status === "streaming";
   const last = messages[messages.length - 1];
   const name = agent?.name ?? "orb";
+  const empty = !messages.length;
+  const greeting = greetingFor(id);
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
@@ -94,13 +100,15 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
   }, [input]);
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col px-6">
-      <div className="flex-1 space-y-7 overflow-y-auto py-8">
-        {!messages.length && (
-          <div className="mt-24 flex flex-col items-center gap-3 text-center">
-            <OrbIcon className="h-14 w-14 text-accent" />
-            <p className="text-xl font-light tracking-tight">{agent?.name ?? "Ask anything"}</p>
-            {agent?.description && <p className="max-w-sm text-sm text-mute">{agent.description}</p>}
+    // an empty chat sits in the middle of the screen: the agent opens with a greeting turn and the composer right under it.
+    // The first message drops the centering, so the composer settles at the bottom and the thread grows above it.
+    <div className={`mx-auto flex h-full max-w-3xl flex-col px-6 ${empty ? "justify-center pb-[12vh]" : ""}`}>
+      <div className={`space-y-7 overflow-y-auto ${empty ? "pb-6" : "flex-1 py-8"}`}>
+        {empty && (
+          <div className="turn turn-agent rise">
+            <div className="mb-1 text-xs text-mute">{name}</div>
+            <p className="text-2xl font-light tracking-tight">{greeting}</p>
+            {agent?.description && <p className="mt-1 text-sm text-mute">{agent.description}</p>}
           </div>
         )}
         {messages.map((m) => {
@@ -175,7 +183,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
         <div ref={end} />
       </div>
       {/* the composer floats: messages fade out under it instead of stopping at a hard edge */}
-      <div className="relative pb-6 before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-linear-to-t before:from-bg">
+      <div className={`relative ${empty ? "" : "pb-6 before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-linear-to-t before:from-bg"}`}>
         <form
           className="composer flex items-end gap-2 rounded-ctl border border-line bg-bg py-1.5 pl-5 pr-1.5 shadow-lg transition-shadow focus-within:border-accent focus-within:ring-3 focus-within:ring-ring"
           onSubmit={(e) => {
