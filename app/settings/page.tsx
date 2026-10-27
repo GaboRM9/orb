@@ -65,7 +65,13 @@ function AI() {
 function Account() {
   return (
     <div className="flex gap-2 border-t border-line pt-6">
-      <form action={clearThreads}><button className="btn">Delete all chats</button></form>
+      <details className="relative">
+        <summary className="btn cursor-pointer list-none [&::-webkit-details-marker]:hidden">Delete all chats</summary>
+        <form action={clearThreads} className="absolute left-0 z-10 mt-2 w-56 space-y-2 rounded-md border border-line bg-bg p-3 text-sm">
+          <p className="text-mute">Every conversation is deleted. Runs are kept.</p>
+          <button className="btn-solid">Yes, delete all</button>
+        </form>
+      </details>
       <form action={logout}><button className="btn">Sign out</button></form>
     </div>
   );
