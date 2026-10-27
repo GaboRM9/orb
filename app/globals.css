@@ -14,9 +14,9 @@
   --color-line: var(--line);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --radius-sm: 1px;
-  --radius-md: 2px;
-  --radius-lg: 2px; /* sharp rectangles; circles are kept for the logo, send button and avatars */
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 24px; /* everything you touch is a pill; containers are softly round; circles for the logo, send button, avatars */
   --shadow-sm: none;
   --shadow-lg: none;
 }
@@ -47,7 +47,12 @@ h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
 @layer components {
   /* translucent surface for things that float over content: menus, sticky bars */
   .glass { background: var(--glass); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }
-  .field { @apply w-full rounded-md border border-line bg-bg px-4 py-2.5 text-sm outline-none transition-shadow placeholder:text-mute focus:shadow-[0_0_0_1px_var(--fg)]; }
+  .field { @apply w-full rounded-full border border-line bg-bg px-5 py-2.5 text-sm outline-none transition-shadow placeholder:text-mute focus:shadow-[0_0_0_1px_var(--fg)]; }
+  textarea.field { border-radius: var(--radius-lg); } /* multi-line fields curve instead of becoming pills */
+  /* segmented tabs: a pill track, the current one solid */
+  .seg { @apply inline-flex gap-1 rounded-full border border-line p-1; }
+  .seg > a { @apply rounded-full px-4 py-1.5 text-sm text-mute transition-colors hover:text-fg; }
+  .seg > a[aria-current="page"] { @apply bg-fg text-bg hover:text-bg; }
   .btn { @apply rounded-full border border-line px-4 py-2 text-sm transition-colors hover:bg-fg hover:text-bg disabled:opacity-40; }
   .btn-solid { @apply rounded-full border border-fg bg-fg px-4 py-2 text-sm text-bg transition-colors hover:bg-bg hover:text-fg disabled:opacity-40; }
 }

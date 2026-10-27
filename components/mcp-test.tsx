@@ -11,7 +11,7 @@ export function McpTest({ id }: { id: string }) {
         {pending ? "Testing…" : "Test"}
       </button>
       {res && (
-        <pre className="whitespace-pre-wrap rounded-md border border-line p-2 font-mono text-xs">
+        <pre className="whitespace-pre-wrap rounded-lg border border-line p-3 font-mono text-xs">
           {res.ok ? "Connected\n" : "Failed: "}{res.text}
         </pre>
       )}

@@ -14,7 +14,7 @@ export async function RunsPanel({ view, agent, status }: { view?: string; agent?
   const s = await runSummary();
   return (
     <div className="space-y-4">
-      <dl className="grid grid-cols-3 gap-px border border-line bg-line">
+      <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line">
         {([["Runs today", s.runs], ["Errors today", s.errors], ["Waiting for approval", s.pending]] as const).map(([label, n]) => (
           <div key={label} className="bg-bg p-4">
             <dt className="text-xs text-mute">{label}</dt>
@@ -22,9 +22,9 @@ export async function RunsPanel({ view, agent, status }: { view?: string; agent?
           </div>
         ))}
       </dl>
-      <div className="flex gap-1 border-b border-line">
+      <div className="seg">
         {[["Runs", undefined], ["Approvals", "approvals"]].map(([label, v]) => (
-          <Link key={label} href={href({ view: v })} className={`-mb-px border-b px-3 py-1.5 text-sm ${(v === "approvals") === approvals ? "border-fg" : "border-transparent text-mute hover:text-fg"}`}>{label}</Link>
+          <Link key={label} href={href({ view: v })} aria-current={(v === "approvals") === approvals ? "page" : undefined}>{label}</Link>
         ))}
       </div>
       <p className="text-sm text-mute">

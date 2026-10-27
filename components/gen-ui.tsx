@@ -7,7 +7,7 @@ export type ChatMessage = UIMessage<never, never, InferUITools<typeof uiTools>>;
 type AddOutput = (a: { tool: string; toolCallId: string; output: unknown }) => void;
 type Part = ChatMessage["parts"][number];
 
-const box = "rounded-lg border border-line p-4";
+const box = "rounded-lg border border-line p-5";
 const Title = ({ children }: { children?: string }) => <div className="mb-3 text-sm font-medium">{children}</div>;
 
 /** Returns a component for known UI-tool parts, or null so the caller falls back to the generic card. */
@@ -104,7 +104,7 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
             {i.data.map((d, n) => (
               <div key={n} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3 text-xs">
                 <span className="truncate text-mute">{d?.label}</span>
-                <div className="h-3 border border-line"><div className="h-full bg-fg transition-all" style={{ width: `${((d?.value ?? 0) / max) * 100}%` }} /></div>
+                <div className="h-3 overflow-hidden rounded-full border border-line"><div className="h-full bg-fg transition-all" style={{ width: `${((d?.value ?? 0) / max) * 100}%` }} /></div>
                 <span className="font-mono">{d?.value}{i.unit ?? ""}</span>
               </div>
             ))}
@@ -140,9 +140,9 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
   return null;
 }
 
-const Skeleton = ({ label }: { label: string }) => <div className="animate-pulse rounded-lg border border-line p-4 text-xs text-mute">{label}</div>;
+const Skeleton = ({ label }: { label: string }) => <div className="animate-pulse rounded-lg border border-line p-5 text-xs text-mute">{label}</div>;
 const Answered = ({ label, text }: { label: string; text: string }) => (
-  <div className="rounded-lg border border-line px-3 py-2 text-xs"><span className="text-mute">{label} → </span>{text}</div>
+  <div className="rounded-full border border-line px-4 py-2 text-xs"><span className="text-mute">{label} → </span>{text}</div>
 );
 
 type FormInput = Extract<Part, { type: "tool-askUser"; state: "input-available" }>["input"];
@@ -174,7 +174,7 @@ function Form({ input, onSubmit }: { input: FormInput; onSubmit: (v: Record<stri
                   <span className="w-12 text-right font-mono text-xs">{String(v[f.name])}</span>
                 </div>
               ) : f.type === "color" ? (
-                <input type="color" className="h-9 w-16 cursor-pointer rounded-md border border-line bg-bg" value={String(v[f.name])} onChange={(e) => set(f.name, e.target.value)} />
+                <input type="color" className="h-9 w-16 cursor-pointer rounded-full border border-line bg-bg" value={String(v[f.name])} onChange={(e) => set(f.name, e.target.value)} />
               ) : (
                 <input className="field" required type={f.type} placeholder={f.placeholder} value={String(v[f.name])}
                   onChange={(e) => set(f.name, f.type === "number" ? Number(e.target.value) : e.target.value)} />
@@ -200,7 +200,7 @@ function MapView({ title, places }: { title: string; places: Place[] }) {
   return (
     <div className={box}>
       <Title>{title}</Title>
-      <iframe title={pl.name} src={src} className="h-64 w-full rounded-md border border-line grayscale dark:invert" loading="lazy" />
+      <iframe title={pl.name} src={src} className="h-64 w-full rounded-lg border border-line grayscale dark:invert" loading="lazy" />
       <div className="mt-3 flex flex-wrap gap-2">
         {places.map((x, n) => (
           <button key={n} className={n === sel ? "btn-solid" : "btn"} onClick={() => setSel(n)}>{x.name}</button>

@@ -131,7 +131,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
                       const respond = (approved: boolean) => addToolApprovalResponse({ id: p.approval.id, approved });
                       flush(i);
                       return blocks.push(
-                        <div key={i} className="space-y-3 rounded-lg border border-line p-4">
+                        <div key={i} className="space-y-3 rounded-lg border border-line p-5">
                           <div className="text-xs text-mute">Needs your approval</div>
                           <div className="text-sm">{approvalSummary(getToolName(p), p.input)}</div>
                           <div className="flex gap-2">
@@ -187,7 +187,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
           </select>
         )}
         <form
-          className="composer flex items-end gap-2 rounded-lg border border-line bg-bg py-1.5 pl-4 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_1px_var(--fg)]"
+          className="composer flex items-end gap-2 rounded-[28px] border border-line bg-bg py-1.5 pl-5 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_1px_var(--fg)]"
           onSubmit={(e) => {
             e.preventDefault();
             if (!input.trim() || busy) return;
