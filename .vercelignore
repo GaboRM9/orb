@@ -1,0 +1,6 @@
+# never upload local secrets or data with `vercel deploy`
+.env
+.env.*
+!.env.example
+data
+.vercel
