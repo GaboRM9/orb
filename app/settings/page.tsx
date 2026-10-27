@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { logout } from "@/app/login/actions";
-import { clearKey, clearOpenAIKey, clearThreads, saveSettings } from "@/lib/actions";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { clearKey, clearOpenAIKey, clearThreads, saveSettings, saveTheme } from "@/lib/actions";
+import { parseTheme } from "@/lib/theme";
 import { RunsPanel } from "@/components/runs-panel";
 import { getSetting } from "@/lib/db";
 import { DEFAULT_MODEL, MODELS } from "@/lib/models";
@@ -32,6 +32,7 @@ async function AI() {
   const hasKey = !!(await getSetting("api_key"));
   const hasOpenAI = !!(await getSetting("openai_key"));
   const model = await getSetting("model", DEFAULT_MODEL);
+  const theme = parseTheme(await getSetting("theme", "{}"));
   return (
     <div className="space-y-6">
       <form action={saveSettings} className="space-y-4">
@@ -56,10 +57,14 @@ async function AI() {
         </div>
       </form>
       <p className="text-xs text-mute">The key is encrypted in data/app.db with AUTH_SECRET (or ADMIN_PASSWORD). Change that secret and you will need to re-enter it.</p>
-      <div className="flex items-center justify-between text-sm">
-        <span>Appearance <span className="text-mute">(follows your system by default)</span></span>
-        <ThemeToggle />
-      </div>
+      <form action={saveTheme} className="flex items-center justify-between text-sm">
+        <span>Appearance</span>
+        <div className="seg">
+          {(["system", "light", "dark"] as const).map((m) => (
+            <button key={m} name="mode" value={m} aria-pressed={theme.mode === m} className="capitalize">{m}</button>
+          ))}
+        </div>
+      </form>
       <Account />
     </div>
   );

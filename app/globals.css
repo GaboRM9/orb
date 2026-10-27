@@ -1,53 +1,90 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* dark: follows the saved mode, or the OS when the mode is "system" */
+@custom-variant dark {
+  &:where([data-mode="dark"], [data-mode="dark"] *) { @slot; }
+  @media (prefers-color-scheme: dark) { &:where([data-mode="system"], [data-mode="system"] *) { @slot; } }
+}
 
-:root { color-scheme: light; --bg: #fff; --surface: #fff; --fg: #000; --mute: #666; --line: #000; --glass: rgb(255 255 255 / 0.85); }
-.dark { color-scheme: dark; --bg: #000; --surface: #000; --fg: #fff; --mute: #999; --line: #fff; --glass: rgb(0 0 0 / 0.85); }
+/* The theme engine. layout.tsx writes the six knobs (paper, ink, accent, radius, density, font) onto <html>;
+   everything below is derived from them, so a theme can never set a surface or line that clashes with its text.
+   Paper/ink swap by data-mode, not light-dark(): the CSS minifier polyfills that with an OS-only media query, which would ignore a forced mode. */
+:root {
+  --paper: #fff; --ink: #0a0a0a; --accent: var(--fg); --radius: 14px; --density: 1; --font: system-ui, sans-serif;
+  --bg: var(--paper); --fg: var(--ink);
+  --surface: color-mix(in oklab, var(--fg) 4%, var(--bg));
+  --surface-2: color-mix(in oklab, var(--fg) 8%, var(--bg));
+  --line: color-mix(in oklab, var(--fg) 13%, var(--bg));
+  --mute: color-mix(in oklab, var(--fg) 58%, var(--bg));
+  --hover: color-mix(in oklab, var(--fg) 6%, transparent);
+  --ring: color-mix(in oklab, var(--accent) 35%, transparent);
+  --on-accent: var(--bg); /* themeStyle overrides this when an accent is set */
+  --glass: color-mix(in oklab, var(--bg) 82%, transparent);
+}
+[data-mode="dark"] { --bg: var(--ink); --fg: var(--paper); }
+@media (prefers-color-scheme: dark) { [data-mode="system"] { --bg: var(--ink); --fg: var(--paper); } }
 
-/* ink theme: pure black on white, inverted in dark mode. Grey is for a few secondary texts only; states invert instead of tinting. */
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-fg: var(--fg);
   --color-mute: var(--mute);
   --color-line: var(--line);
-  --font-sans: var(--font-geist-sans);
+  --color-hover: var(--hover);
+  --color-ring: var(--ring);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --font-sans: var(--font);
   --font-mono: var(--font-geist-mono);
-  --radius-sm: 1px;
-  --radius-md: 2px;
-  --radius-lg: 2px; /* sharp rectangles; circles are kept for the logo, send button and avatars */
-  --shadow-sm: none;
-  --shadow-lg: none;
+  --spacing: calc(0.25rem * var(--density));
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 1.4);
+  --radius-ctl: calc(var(--radius) * 2); /* controls: a pill at the default radius, square at 0 */
+  --shadow-sm: 0 1px 2px color-mix(in oklab, var(--ink) 10%, transparent);
+  --shadow-lg: 0 8px 24px color-mix(in oklab, var(--ink) 14%, transparent);
 }
 
-html { accent-color: var(--fg); } /* native sliders and checkboxes follow the theme */
+html { accent-color: var(--accent); } /* native sliders and checkboxes follow the theme */
 html { font-size: 106.25%; } /* 17px root: every rem-based size scales up together */
-body { background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, var(--font-sans), system-ui, sans-serif; -webkit-font-smoothing: antialiased; letter-spacing: -0.006em; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); -webkit-font-smoothing: antialiased; letter-spacing: -0.006em; }
 h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
-::selection { background: var(--fg); color: var(--bg); }
-:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+::selection { background: var(--ring); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .field:focus-visible, .composer textarea:focus-visible { outline: none; } /* these draw their own focus ring */
 
-/* the orb breathes while the agent is working; still for users who ask for less motion */
-@keyframes breathe { 0%, 100% { transform: scale(0.85); opacity: 0.4; } 50% { transform: scale(1); opacity: 1; } }
-.breathe { animation: breathe 2.8s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .breathe { animation: none; opacity: 0.7; } }
+/* a chat turn: the margin line marks the speaker (ink for you, accent for the agent) and pulses while the agent works */
+.turn { position: relative; padding-left: calc(1.25rem * var(--density)); }
+.turn::before { content: ""; position: absolute; left: 0; top: 0.3rem; bottom: 0.3rem; width: 2px; border-radius: 2px; background: var(--line); }
+.turn-agent::before { background: var(--accent); }
+@keyframes pulse-line { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.turn-live::before { animation: pulse-line 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .turn-live::before { animation: none; opacity: 0.6; } }
 
 /* the newest message settles in; one duration for every entrance */
 @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .rise { animation: rise 0.25s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
 
-/* a hovered pill or row inverts, so grey secondary text inside it must follow, and a selection must not vanish into a solid surface */
-.btn:hover .text-mute, .row-hover:hover .text-mute { color: inherit; }
-.row-hover:hover { background: var(--fg); color: var(--bg); }
-.bg-fg ::selection, .btn:hover ::selection, .btn-solid ::selection, .row-hover:hover ::selection { background: var(--bg); color: var(--fg); }
-
 @layer components {
   /* translucent surface for things that float over content: menus, sticky bars */
   .glass { background: var(--glass); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }
-  .field { @apply w-full rounded-md border border-line bg-bg px-4 py-2.5 text-sm outline-none transition-shadow placeholder:text-mute focus:shadow-[0_0_0_1px_var(--fg)]; }
-  .btn { @apply rounded-full border border-line px-4 py-2 text-sm transition-colors hover:bg-fg hover:text-bg disabled:opacity-40; }
-  .btn-solid { @apply rounded-full border border-fg bg-fg px-4 py-2 text-sm text-bg transition-colors hover:bg-bg hover:text-fg disabled:opacity-40; }
+  .card { @apply rounded-lg border border-line bg-surface p-5; }
+  .chip { @apply rounded-ctl border border-line px-2.5 py-0.5 text-xs; }
+  .row-hover { @apply transition-colors hover:bg-hover; }
+  /* tool calls, thinking, details: a chip that opens to show what's behind it */
+  .peek { @apply text-xs; }
+  .peek > summary { @apply inline-flex cursor-pointer list-none rounded-ctl border border-line px-2.5 py-0.5 text-mute transition-colors hover:bg-hover hover:text-fg; }
+  .peek > summary::-webkit-details-marker { display: none; }
+  .peek[open] > summary { @apply bg-surface-2 text-fg; }
+  .peek > pre { @apply mt-2 overflow-x-auto whitespace-pre-wrap rounded-md bg-surface p-3 font-mono leading-5 text-mute; }
+  .field { @apply w-full rounded-ctl border border-line bg-bg px-5 py-2.5 text-sm outline-none transition-shadow placeholder:text-mute focus:border-accent focus:ring-3 focus:ring-ring; }
+  textarea.field { border-radius: var(--radius-lg); } /* multi-line fields curve instead of becoming pills */
+  /* segmented tabs: a tinted track, the current one raised */
+  .seg { @apply inline-flex gap-1 rounded-ctl bg-surface-2 p-1; }
+  .seg > a, .seg > button { @apply rounded-ctl px-4 py-1.5 text-sm text-mute transition-colors hover:text-fg; }
+  .seg > [aria-current="page"], .seg > [aria-pressed="true"] { @apply bg-bg text-fg shadow-sm; }
+  .btn { @apply rounded-ctl border border-line px-4 py-2 text-sm transition-colors hover:bg-hover disabled:opacity-40; }
+  .btn-solid { @apply rounded-ctl border border-accent bg-accent px-4 py-2 text-sm text-on-accent transition-opacity hover:opacity-85 disabled:opacity-40; }
 }

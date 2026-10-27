@@ -9,16 +9,17 @@ export default async function Page({ params, searchParams }: PageProps<"/chat/[i
   const { id } = await params;
   const { agent: agentParam } = await searchParams;
   const messages = (await loadChat(id)) as ChatMessage[];
-  const agents = await listAgents();
-  // an empty thread starts with the first agent; a thread that already has history keeps whatever it had
-  const agent = (await getAgent((await threadAgentId(id)) ?? (typeof agentParam === "string" ? agentParam : undefined))) ?? (messages.length ? undefined : agents[0]);
+  // a new thread starts with Assistant (or the agent its link names); one with history keeps whatever it had.
+  // listAgents is the fallback in case Assistant was deleted.
+  const agent =
+    (await getAgent((await threadAgentId(id)) ?? (typeof agentParam === "string" ? agentParam : undefined))) ??
+    (messages.length ? undefined : ((await getAgent("assistant")) ?? (await listAgents())[0]));
   return (
     <Chat
       key={id}
       id={id}
       initialMessages={messages}
       agent={agent && { id: agent.id, name: agent.name, description: agent.description }}
-      agents={agents.map((a) => ({ id: a.id, name: a.name }))}
     />
   );
 }

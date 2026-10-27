@@ -18,10 +18,10 @@ export default async function LibraryPage({ searchParams }: PageProps<"/library"
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Library</h1>
       <p className="text-sm text-mute">What your agents can know and use.</p>
-      <nav className="flex gap-1 border-b border-line">
+      <nav className="seg">
         {tabs.map(([k, label]) => (
           <Link key={k} href={`/library?tab=${k}`}
-            className={`-mb-px border-b px-3 py-1.5 text-sm ${active === k ? "border-fg" : "border-transparent text-mute hover:text-fg"}`}>
+            aria-current={active === k ? "page" : undefined}>
             {label}
           </Link>
         ))}
@@ -49,7 +49,7 @@ function Folder({ node, prefix }: { node: Node; prefix: string }) {
   return (
     <div className="space-y-1">
       {[...node.dirs].map(([name, child]) => (
-        <details key={name} open className="rounded-md border border-line px-3 py-1.5">
+        <details key={name} open className="rounded-lg border border-line px-4 py-2">
           <summary className="flex cursor-pointer items-center justify-between gap-2 text-sm font-medium">
             <span>📁 {name}</span>
             <button className="btn text-xs" formAction={deleteKnowledgeFolder.bind(null, prefix + name)}>Delete folder</button>
@@ -151,7 +151,7 @@ async function Connections() {
         Credentials are encrypted in data/app.db.
       </p>
       {(await listMcp()).map((m) => (
-        <div key={m.id} className="space-y-2 rounded-lg border border-line p-4">
+        <div key={m.id} className="space-y-2 card">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="text-sm font-medium">{m.name}</div>
@@ -165,7 +165,7 @@ async function Connections() {
           <McpTest id={m.id} />
         </div>
       ))}
-      <form action={saveMcp} className="space-y-2 rounded-lg border border-line p-4">
+      <form action={saveMcp} className="space-y-2 card">
         <div className="text-sm font-medium">Add MCP server</div>
         <input className="field" name="name" placeholder="Name (e.g. docs)" required />
         <input className="field font-mono" name="url" placeholder="https://example.com/mcp" required />
