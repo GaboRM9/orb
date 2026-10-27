@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { logout } from "@/app/login/actions";
-import { clearKey, clearOpenAIKey, clearThreads, saveSettings, saveTheme } from "@/lib/actions";
+import { clearKey, clearOpenAIKey, clearThreads, saveGenUi, saveSettings, saveTheme } from "@/lib/actions";
 import { parseTheme } from "@/lib/theme";
 import { RunsPanel } from "@/components/runs-panel";
 import { getSetting } from "@/lib/db";
@@ -33,6 +33,7 @@ async function AI() {
   const hasOpenAI = !!(await getSetting("openai_key"));
   const model = await getSetting("model", DEFAULT_MODEL);
   const theme = parseTheme(await getSetting("theme", "{}"));
+  const genUi = (await getSetting("gen_ui", "on")) !== "off";
   return (
     <div className="space-y-6">
       <form action={saveSettings} className="space-y-4">
@@ -57,6 +58,17 @@ async function AI() {
         </div>
       </form>
       <p className="text-xs text-mute">The key is encrypted in data/app.db with AUTH_SECRET (or ADMIN_PASSWORD). Change that secret and you will need to re-enter it.</p>
+      <form action={saveGenUi} className="flex items-center justify-between gap-4 text-sm">
+        <span>
+          Generative UI <span className="chip ml-1 border-accent">Beta</span>
+          <span className="mt-0.5 block text-xs text-mute">Answers as cards, options, maps and other interactive views. Off: plain text.</span>
+        </span>
+        <div className="seg shrink-0">
+          {(["on", "off"] as const).map((v) => (
+            <button key={v} name="gen_ui" value={v} aria-pressed={genUi === (v === "on")} className="capitalize">{v}</button>
+          ))}
+        </div>
+      </form>
       <form action={saveTheme} className="flex items-center justify-between text-sm">
         <span>Appearance</span>
         <div className="seg">

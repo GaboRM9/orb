@@ -58,6 +58,9 @@ h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
 .turn { position: relative; padding-left: calc(1.25rem * var(--density)); }
 .turn::before { content: ""; position: absolute; left: 0; top: 0.3rem; bottom: 0.3rem; width: 2px; border-radius: 2px; background: var(--line); }
 .turn-agent::before { background: var(--accent); }
+/* your turns sit on the right, as wide as their text, with the line on their right edge */
+.turn-user { width: fit-content; max-width: 80%; margin-left: auto; padding-left: 0; padding-right: calc(1.25rem * var(--density)); }
+.turn-user::before { left: auto; right: 0; }
 @keyframes pulse-line { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 .turn-live::before { animation: pulse-line 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .turn-live::before { animation: none; opacity: 0.6; } }
@@ -66,6 +69,15 @@ h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
 @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .rise { animation: rise 0.25s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
+
+/* Directions map: the route in the accent, tiles inverted in dark mode like the other maps */
+.route-map { background: var(--surface); font-family: inherit; }
+.route-map .route-line { stroke: var(--accent); }
+.route-map .route-dot { stroke: var(--accent); fill: var(--bg); fill-opacity: 1; }
+.route-map .leaflet-control-attribution { background: var(--glass); color: var(--mute); font-size: 10px; }
+.route-map .leaflet-control-attribution a { color: inherit; }
+[data-mode="dark"] .route-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) grayscale(0.4); }
+@media (prefers-color-scheme: dark) { [data-mode="system"] .route-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) grayscale(0.4); } }
 
 @layer components {
   /* translucent surface for things that float over content: menus, sticky bars */

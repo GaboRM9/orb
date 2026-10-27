@@ -58,6 +58,9 @@ function ToolRun({ parts }: { parts: ToolPart[] }) {
   );
 }
 
+// chat id → toolCallId → what that surface shows now (set when the user changes it, sent with the next message)
+const surfaceStates = new Map<string, Record<string, string>>();
+
 export function Chat({ id, initialMessages, agent }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent }) {
   const router = useRouter();
   const agentId = agent?.id;
@@ -66,7 +69,8 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
       new DefaultChatTransport({
         api: "/api/chat",
         // server holds history; send only the newest message (+ which agent this thread talks to)
-        prepareSendMessagesRequest: ({ id, messages }) => ({ body: { id, agentId, message: messages[messages.length - 1] } }),
+        // + what open surfaces show now, if the user changed them since the agent opened them
+        prepareSendMessagesRequest: ({ id, messages }) => ({ body: { id, agentId, message: messages[messages.length - 1], context: Object.values(surfaceStates.get(id) ?? {}) } }),
       }),
     [agentId],
   );
@@ -116,8 +120,8 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
           const live = busy && m.id === last?.id && m.role === "assistant";
           return (
             // no bubbles: a line in the margin says who's speaking, and pulses while the agent works
-            <div key={m.id} className={`turn ${m.role === "assistant" ? "turn-agent" : ""} ${live ? "turn-live" : ""} ${m.id === last?.id ? "rise" : ""}`}>
-              <div className="mb-1 text-xs text-mute">{m.role === "user" ? "You" : name}</div>
+            <div key={m.id} className={`turn ${m.role === "assistant" ? "turn-agent" : "turn-user"} ${live ? "turn-live" : ""} ${m.id === last?.id ? "rise" : ""}`}>
+              <div className={`mb-1 text-xs text-mute ${m.role === "user" ? "text-right" : ""}`}>{m.role === "user" ? "You" : name}</div>
               <div className="group space-y-3 text-sm leading-7">
                 {(() => {
                   const blocks: React.ReactNode[] = [];
@@ -153,7 +157,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
                           <pre className="!font-sans">{p.text}</pre>
                         </details>,
                       ));
-                    const ui = renderUiPart(p, addToolOutput as never);
+                    const ui = renderUiPart(p, { addOutput: addToolOutput as never, send: (text) => sendMessage({ text }), live: !busy && m.id === last?.id, setContext: (k, t) => surfaceStates.set(id, { ...surfaceStates.get(id), [k]: t }) });
                     if (ui) return (flush(i), blocks.push(<div key={i}>{ui}</div>));
                     if (isToolUIPart(p)) run.push(p);
                   });

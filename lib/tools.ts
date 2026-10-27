@@ -4,6 +4,7 @@ import { db, listSkills } from "./db";
 import { search } from "./knowledge";
 import { safeFetchText } from "./net-safe";
 import { uiTools } from "./ui-tools";
+import { surfaceTools } from "./surfaces";
 
 export const allTools = {
   getTime: tool({
@@ -71,11 +72,14 @@ export const DEFAULT_TOOLS = ["getTime", "calculate", "searchKnowledge", "search
 export const toolNames = Object.keys(allTools) as (keyof typeof allTools)[];
 
 /** Enabled demo tools + `loadSkill`, which lazily returns a skill's full body. */
-export async function activeTools(only?: { tools: string[]; skills: string[] }) {
+/** Generative UI (a beta switch in Settings): answer formats, show* views, forms, and surfaces. */
+export const genUiTools = (): Record<string, Tool> => ({ ...uiTools, ...surfaceTools() });
+
+export async function activeTools(only?: { tools: string[]; skills: string[] }, genUi = true) {
   const off = new Set<string>(only ? toolNames.filter((n) => !only.tools.includes(n)) : []);
   const tools: Record<string, Tool> = {
     ...Object.fromEntries(Object.entries(allTools).filter(([k]) => !off.has(k))),
-    ...uiTools,
+    ...(genUi ? genUiTools() : {}),
   };
   const skills = (await listSkills()).filter((s) => s.enabled && (!only || only.skills.includes(s.name)));
   for (const sk of skills) // a skill brings along the tools it needs
