@@ -1,6 +1,6 @@
 # orb
 
-[![ci](https://github.com/GaboRM9/orbz/actions/workflows/ci.yml/badge.svg)](https://github.com/GaboRM9/orbz/actions/workflows/ci.yml)
+[![ci](https://github.com/GaboRM9/orb/actions/workflows/ci.yml/badge.svg)](https://github.com/GaboRM9/orb/actions/workflows/ci.yml)
 
 A calm, minimal agent workspace (AI SDK v7): chat, tools, skills, settings. libSQL storage (a local SQLite file, or Turso on Vercel), Anthropic models.
 
