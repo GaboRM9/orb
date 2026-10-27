@@ -29,12 +29,12 @@ export function chunk(text: string, max = 800): string[] {
   return out;
 }
 
-const apiKey = () => open(getSetting("openai_key")) || process.env.OPENAI_API_KEY || "";
-export const hasEmbeddingKey = () => !!apiKey();
+const apiKey = async () => open(await getSetting("openai_key")) || process.env.OPENAI_API_KEY || "";
+export const hasEmbeddingKey = async () => !!(await apiKey());
 
 /** One embedding per input, or null if there is no key or the call fails (callers fall back to keyword search). */
 export async function embed(texts: string[]): Promise<Float32Array[] | null> {
-  const key = apiKey();
+  const key = await apiKey();
   if (!key || !texts.length) return null;
   try {
     const res = await fetch("https://api.openai.com/v1/embeddings", {
@@ -52,63 +52,67 @@ export async function embed(texts: string[]): Promise<Float32Array[] | null> {
   }
 }
 
-const toBlob = (v: Float32Array) => Buffer.from(v.buffer, v.byteOffset, v.byteLength);
-const fromBlob = (b: Buffer) => new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); // copy: pool offsets can be unaligned
+const vecText = (v: ArrayLike<number>) => `[${Array.from(v).join(",")}]`; // what vector32() parses
 
 let running: Promise<{ done: number; left: number }> | null = null;
 /** Embeds chunks that have no vector (or one from another model). Stops at the first failed batch; overlapping calls share one run so nothing is embedded twice. */
 export const embedMissing = () => (running ??= embedAll().finally(() => (running = null)));
 
 async function embedAll(): Promise<{ done: number; left: number }> {
-  const todo = () => db.prepare("select id, text from knowledge_chunks where vec is null or embed_model is not ? limit ?");
   let done = 0;
   for (;;) {
-    const rows = todo().all(EMBED_MODEL, BATCH) as { id: number; text: string }[];
+    const rows = (await db.prepare("select id, text from knowledge_chunks where vec is null or embed_model is not ? limit ?").all(EMBED_MODEL, BATCH)) as { id: number; text: string }[];
     const vecs = await embed(rows.map((r) => r.text));
     if (!rows.length || !vecs) break;
-    const upd = db.prepare("update knowledge_chunks set vec=?, embed_model=? where id=?");
-    db.transaction(() => rows.forEach((r, i) => upd.run(toBlob(vecs[i]), EMBED_MODEL, r.id)))();
+    await db.batch(rows.map((r, i): [string, ...unknown[]] => ["update knowledge_chunks set vec=vector32(?), embed_model=? where id=?", vecText(vecs[i]), EMBED_MODEL, r.id]));
     done += rows.length;
   }
-  return { done, left: (db.prepare("select count(*) c from knowledge_chunks where vec is null or embed_model is not ?").get(EMBED_MODEL) as { c: number }).c };
+  return { done, left: await staleChunks() };
 }
 
 /** Upserts a doc. Unchanged chunks (same hash) keep their vectors, so re-syncing only embeds what changed. Call embedMissing() once after a batch of docs. */
-export function addDoc(path: string, title: string, text: string, source = "upload", sourceRef: string | null = null) {
+export async function addDoc(path: string, title: string, text: string, source = "upload", sourceRef: string | null = null) {
   path = normPath(path);
   if (!path) throw new Error("Empty path");
   const hashes = new Map(chunk(text).map((c) => [createHash("sha256").update(c).digest("hex"), c]));
-  db.transaction(() => {
-    db.prepare(
+  await db.tx(async (tx) => {
+    await tx.prepare(
       `insert into knowledge_docs (path,title,source,source_ref,updated) values (?,?,?,?,?)
        on conflict(path) do update set title=excluded.title, source=excluded.source, source_ref=excluded.source_ref, updated=excluded.updated`,
     ).run(path, title, source, sourceRef, Date.now());
-    const doc = (db.prepare("select id from knowledge_docs where path=?").get(path) as { id: number }).id;
+    const doc = ((await tx.prepare("select id from knowledge_docs where path=?").get(path)) as { id: number }).id;
     const have = new Set<string>();
-    const del = db.prepare("delete from knowledge_chunks where id=?");
-    for (const r of db.prepare("select id, hash from knowledge_chunks where doc_id=?").all(doc) as { id: number; hash: string }[]) {
+    for (const r of (await tx.prepare("select id, hash from knowledge_chunks where doc_id=?").all(doc)) as { id: number; hash: string }[]) {
       if (hashes.has(r.hash) && !have.has(r.hash)) have.add(r.hash);
-      else del.run(r.id);
+      else await tx.prepare("delete from knowledge_chunks where id=?").run(r.id);
     }
-    const ins = db.prepare("insert into knowledge_chunks (doc_id,hash,text) values (?,?,?)");
-    const fts = db.prepare("insert into knowledge_fts (rowid,text) values (?,?)");
-    for (const [h, c] of hashes) if (!have.has(h)) fts.run(ins.run(doc, h, c).lastInsertRowid, c);
-  })(); // chunks without a vector (no key, failed embed) stay searchable by keyword
+    for (const [h, c] of hashes)
+      if (!have.has(h)) {
+        const { lastInsertRowid } = await tx.prepare("insert into knowledge_chunks (doc_id,hash,text) values (?,?,?)").run(doc, h, c);
+        await tx.prepare("insert into knowledge_fts (rowid,text) values (?,?)").run(lastInsertRowid, c);
+      }
+  }); // chunks without a vector (no key, failed embed) stay searchable by keyword
 }
 
-export const deleteDoc = (id: number) => db.prepare("delete from knowledge_docs where id=?").run(id);
+// chunks go first so the FTS trigger runs even where foreign-key cascades are off
+export const deleteDoc = (id: number) =>
+  db.batch([["delete from knowledge_chunks where doc_id=?", id], ["delete from knowledge_docs where id=?", id]]);
 export const deleteFolder = (prefix: string) => {
   prefix = normPath(prefix);
-  db.prepare("delete from knowledge_docs where path = ? or path like ? escape '\\'").run(prefix, like(prefix));
+  const where = "path = ? or path like ? escape '\\'";
+  return db.batch([
+    [`delete from knowledge_chunks where doc_id in (select id from knowledge_docs where ${where})`, prefix, like(prefix)],
+    [`delete from knowledge_docs where ${where}`, prefix, like(prefix)],
+  ]);
 };
 
 export type Doc = { id: number; path: string; title: string; source: string; source_ref: string | null; updated: number; chunks: number };
-export const listDocs = () =>
-  db.prepare(
+export const listDocs = async () =>
+  (await db.prepare(
     "select d.*, (select count(*) from knowledge_chunks c where c.doc_id=d.id) chunks from knowledge_docs d order by d.path",
-  ).all() as Doc[];
-export const staleChunks = () =>
-  (db.prepare("select count(*) c from knowledge_chunks where vec is null or embed_model is not ?").get(EMBED_MODEL) as { c: number }).c;
+  ).all()) as Doc[];
+export const staleChunks = async () =>
+  ((await db.prepare("select count(*) c from knowledge_chunks where vec is null or embed_model is not ?").get(EMBED_MODEL)) as { c: number }).c;
 
 export type Hit = { path: string; title: string; text: string };
 
@@ -122,30 +126,26 @@ export async function search(query: string, folder = "", k = 4): Promise<Hit[]> 
   if (terms.length)
     lists.push(
       (
-        db.prepare(
+        (await db.prepare(
           `select c.id from knowledge_fts f join knowledge_chunks c on c.id=f.rowid join knowledge_docs d on d.id=c.doc_id
            where knowledge_fts match @q ${scope} order by bm25(knowledge_fts) limit 20`,
-        ).all({ ...args, q: terms.map((t) => `"${t}"`).join(" OR ") }) as { id: number }[]
+        ).all({ ...args, q: terms.map((t) => `"${t}"`).join(" OR ") })) as { id: number }[]
       ).map((r) => r.id),
     );
   const qv = (await embed([query]))?.[0];
-  if (qv) {
-    // ponytail: linear scan, streamed so memory stays flat (~180ms at 50k chunks); vectors are unit length so dot = cosine. Swap for sqlite-vec past ~100k chunks.
-    const scored: [number, number][] = [];
-    const rows = db.prepare(
-      `select c.id, c.vec from knowledge_chunks c join knowledge_docs d on d.id=c.doc_id where c.embed_model=@m ${scope}`,
-    ).iterate({ ...args, m: EMBED_MODEL }) as Iterable<{ id: number; vec: Buffer }>;
-    for (const r of rows) {
-      const v = fromBlob(r.vec);
-      let dot = 0;
-      for (let i = 0; i < v.length; i++) dot += v[i] * qv[i];
-      scored.push([r.id, dot]);
-    }
-    lists.push(scored.sort((a, b) => b[1] - a[1]).slice(0, 20).map((s) => s[0]));
-  }
+  if (qv)
+    // exact cosine scan inside the database (vectors never leave it); rows without a vector from this model are skipped
+    lists.push(
+      (
+        (await db.prepare(
+          `select c.id from knowledge_chunks c join knowledge_docs d on d.id=c.doc_id where c.embed_model=@m ${scope}
+           order by vector_distance_cos(c.vec, vector32(@v)) limit 20`,
+        ).all({ ...args, m: EMBED_MODEL, v: vecText(qv) })) as { id: number }[]
+      ).map((r) => r.id),
+    );
   const rrf = new Map<number, number>();
   for (const l of lists) l.forEach((id, rank) => rrf.set(id, (rrf.get(id) ?? 0) + 1 / (60 + rank)));
   const top = [...rrf].sort((a, b) => b[1] - a[1]).slice(0, k).map((e) => e[0]);
   const get = db.prepare("select d.path, d.title, c.text from knowledge_chunks c join knowledge_docs d on d.id=c.doc_id where c.id=?");
-  return top.map((id) => get.get(id) as Hit);
+  return Promise.all(top.map(async (id) => (await get.get(id)) as Hit));
 }

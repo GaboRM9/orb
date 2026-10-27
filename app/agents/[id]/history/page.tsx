@@ -8,11 +8,11 @@ export const dynamic = "force-dynamic";
 
 export default async function History({ params }: PageProps<"/agents/[id]/history">) {
   const { id } = await params;
-  const agent = getAgent(id);
+  const agent = await getAgent(id);
   if (!agent) notFound();
-  const threads = db
+  const threads = (await db
     .prepare("select id, title, updated, (select json_array_length(json) from messages m where m.thread_id=t.id) n from threads t where agent_id=? order by updated desc")
-    .all(id) as { id: string; title: string; updated: number; n: number | null }[];
+    .all(id)) as { id: string; title: string; updated: number; n: number | null }[];
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <div className="flex items-center gap-3">

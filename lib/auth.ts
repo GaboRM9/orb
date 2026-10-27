@@ -1,14 +1,15 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { secret } from "./secret";
 import { redirect } from "next/navigation";
 
 export const COOKIE = "orb_session";
 export const SESSION_SECONDS = 7 * 24 * 3600;
 
-// Single admin: ADMIN_PASSWORD gates the whole app. Sessions are stateless HMAC tokens signed with AUTH_SECRET (or the password).
+// Single admin: ADMIN_PASSWORD gates the whole app. Sessions are stateless HMAC tokens signed with AUTH_SECRET (or the password, except on Vercel, where AUTH_SECRET is required).
 // ponytail: one shared admin, no users table; swap for a provider (Clerk/Auth0) when you need per-user accounts or roles.
-export const authConfigured = () => !!process.env.ADMIN_PASSWORD;
-const mac = (s: string) => createHmac("sha256", process.env.AUTH_SECRET || process.env.ADMIN_PASSWORD || "").update(s).digest("base64url");
+export const authConfigured = () => !!process.env.ADMIN_PASSWORD && !!secret();
+const mac = (s: string) => createHmac("sha256", secret()).update(s).digest("base64url");
 const same = (a: string, b: string) => timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
 
 export const passwordOk = (p: string) => authConfigured() && same(p, process.env.ADMIN_PASSWORD!);

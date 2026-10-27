@@ -5,7 +5,7 @@ import { toolNames } from "@/lib/tools";
 
 export const dynamic = "force-dynamic";
 
-type Skill = ReturnType<typeof listSkills>[number];
+type Skill = Awaited<ReturnType<typeof listSkills>>[number];
 
 function SkillForm({ cur }: { cur?: Skill }) {
   const have: string[] = cur ? JSON.parse(cur.tools_json) : [];
@@ -35,7 +35,7 @@ function SkillForm({ cur }: { cur?: Skill }) {
 
 export default async function SkillsPage({ searchParams }: PageProps<"/skills">) {
   const { skill, new: isNew } = await searchParams;
-  const skills = listSkills();
+  const skills = await listSkills();
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Skills</h1>

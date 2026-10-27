@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EditAgent({ params }: PageProps<"/agents/[id]/edit">) {
   const { id } = await params;
-  const agent = getAgent(id);
+  const agent = await getAgent(id);
   if (!agent) notFound();
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">

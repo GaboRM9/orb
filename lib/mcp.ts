@@ -17,7 +17,7 @@ export async function openMcp(ids: string[]) {
   const tools: Record<string, Tool> = {};
   const warnings: string[] = [];
   const servers = ids.length
-    ? (db.prepare(`select * from mcp_servers where enabled=1 and id in (${ids.map(() => "?").join(",")})`).all(...ids) as McpServer[])
+    ? ((await db.prepare(`select * from mcp_servers where enabled=1 and id in (${ids.map(() => "?").join(",")})`).all(...ids)) as McpServer[])
     : [];
   await Promise.all(
     servers.map(async (s) => {

@@ -9,6 +9,7 @@ import { getSetting, listMcp } from "@/lib/db";
 import { DEFAULT_MODEL, MODELS } from "@/lib/models";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // GitHub import and embedding run inside this page's server actions
 
 const tabs = [["ai", "AI"], ["knowledge", "Knowledge"], ["connections", "Connections"], ["runs", "Runs"]] as const;
 
@@ -39,9 +40,10 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   );
 }
 
-function AI() {
-  const hasKey = !!getSetting("api_key");
-  const hasOpenAI = !!getSetting("openai_key");
+async function AI() {
+  const hasKey = !!(await getSetting("api_key"));
+  const hasOpenAI = !!(await getSetting("openai_key"));
+  const model = await getSetting("model", DEFAULT_MODEL);
   return (
     <div className="space-y-6">
       <form action={saveSettings} className="space-y-4">
@@ -51,7 +53,7 @@ function AI() {
         </label>
         <label className="block space-y-1 text-sm">
           <span>Model</span>
-          <select className="field" name="model" defaultValue={getSetting("model", DEFAULT_MODEL)}>
+          <select className="field" name="model" defaultValue={model}>
             {MODELS.map((m) => <option key={m}>{m}</option>)}
           </select>
         </label>
@@ -105,9 +107,10 @@ function Folder({ node, prefix }: { node: Node; prefix: string }) {
   );
 }
 
-function Knowledge() {
-  const docs = listDocs();
-  const stale = staleChunks();
+async function Knowledge() {
+  const docs = await listDocs();
+  const stale = await staleChunks();
+  const canEmbed = await hasEmbeddingKey();
   return (
     <div className="space-y-4">
       <p className="text-xs text-mute">
@@ -115,8 +118,8 @@ function Knowledge() {
       </p>
       {stale > 0 && (
         <form action={embedKnowledge} className="flex items-center gap-3 text-sm">
-          <span className="text-mute">{stale} chunks have no embedding{hasEmbeddingKey() ? "" : " (add an OpenAI key first)"}; they are still found by keyword.</span>
-          {hasEmbeddingKey() && <button className="btn text-xs">Embed now</button>}
+          <span className="text-mute">{stale} chunks have no embedding{canEmbed ? "" : " (add an OpenAI key first)"}; they are still found by keyword.</span>
+          {canEmbed && <button className="btn text-xs">Embed now</button>}
         </form>
       )}
       <form>{docs.length ? <Folder node={tree(docs)} prefix="" /> : <p className="text-sm text-mute">Nothing here yet.</p>}</form>
@@ -144,14 +147,14 @@ function Account() {
   );
 }
 
-function Connections() {
+async function Connections() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-mute">
         Remote tool servers (Streamable HTTP). Attach them to an agent in its form. Every call to an MCP tool asks for your approval in the chat.
         Credentials are encrypted in data/app.db.
       </p>
-      {listMcp().map((m) => (
+      {(await listMcp()).map((m) => (
         <div key={m.id} className="space-y-2 rounded-lg border border-line p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
