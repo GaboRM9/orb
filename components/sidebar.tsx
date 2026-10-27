@@ -40,6 +40,7 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
   const item = (on: boolean) => `block truncate px-3 py-2 text-[15px] ${on ? "bg-fg text-bg" : "hover:underline"}`;
   const on = (prefix: string) => path.startsWith(prefix);
   const hideWhenCollapsed = collapsed ? "md:hidden" : "";
+  const rail = collapsed ? "md:mx-auto md:size-10 md:justify-center md:!p-0" : ""; // every collapsed control: one 40px circle on the same centre line
   return (
     <>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line glass px-4 md:hidden">
@@ -52,10 +53,10 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
       <aside
         className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col overflow-hidden border-r border-line bg-surface p-5 transition-[transform,visibility] duration-200 md:static md:z-auto md:shrink-0 md:translate-x-0 md:transition-[width] ${open ? "translate-x-0" : "invisible -translate-x-full md:visible"} ${collapsed ? "md:w-16 md:p-3" : ""}`}
       >
-        <div className="mb-6 px-2"><OrbIcon className="h-7 w-7" label="orb" /></div>
+        <div className={`mb-6 px-3 ${collapsed ? "md:flex md:justify-center md:px-0" : ""}`}><OrbIcon className="h-7 w-7" label="orb" /></div>
         {/* prefetch off: "/" redirects to a fresh chat id, which must not be cached and reused */}
-        <Link href="/" prefetch={false} onClick={close} aria-label="New chat" title="New chat" className="btn flex items-center gap-3 !px-3 text-sm">
-          <PlusIcon /><span className={hideWhenCollapsed}>New chat</span>
+        <Link href="/" prefetch={false} onClick={close} aria-label="New chat" title="New chat" className={`btn flex items-center gap-3 !px-3 text-sm ${rail}`}>
+          <PlusIcon className="h-5 w-5" /><span className={hideWhenCollapsed}>New chat</span>
         </Link>
         <div className={`mt-6 flex min-h-0 flex-1 flex-col gap-0.5 ${hideWhenCollapsed}`}>
           {threads.length > 0 && <div className="px-3 pb-1 text-xs text-mute">Recent</div>}
@@ -83,18 +84,18 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
               onClick={close}
               aria-label={collapsed ? label : undefined}
               title={collapsed ? label : undefined}
-              className={`${item(on(prefix))} flex items-center gap-3 rounded-full !px-4`}
+              className={`${item(on(prefix))} flex items-center gap-3 rounded-full !px-3 ${rail}`}
             >
-              <Icon /><span className={hideWhenCollapsed}>{label}</span>
+              <Icon className="h-5 w-5" /><span className={hideWhenCollapsed}>{label}</span>
             </Link>
           ))}
           <button
             onClick={toggleCollapsed}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="btn mt-2 hidden place-items-center p-0 md:grid md:h-9 md:w-9"
+            className={`btn mt-2 hidden place-items-center p-0 md:grid md:size-10 ${collapsed ? "md:mx-auto" : ""}`}
           >
-            <PanelLeftIcon />
+            <PanelLeftIcon className="h-5 w-5" />
           </button>
         </nav>
       </aside>

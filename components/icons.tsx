@@ -1,7 +1,7 @@
 const svg = (d: React.ReactNode) =>
   function Icon({ className = "h-4 w-4" }: { className?: string }) {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${className}`} aria-hidden>
         {d}
       </svg>
     );
@@ -21,7 +21,7 @@ export const MenuIcon = svg(<path d="M4 6h16M4 12h16M4 18h16" />);
 export const MoonIcon = svg(<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />);
 // the logo: a plain ring, the "o" of orb. Decorative unless given a label.
 export const OrbIcon = ({ className = "h-4 w-4", label }: { className?: string; label?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={className} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`shrink-0 ${className}`} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
     <circle cx="12" cy="12" r="9" />
   </svg>
 );
