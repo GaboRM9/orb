@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { after } from "next/server";
 import { consumeStream, convertToModelMessages, createIdGenerator, createUIMessageStreamResponse, generateId, isStepCount, streamText, toUIMessageStream, type SystemModelMessage, type UIMessage } from "ai";
 import { requestAuthed } from "@/lib/auth";
-import { getAgent, getSetting, threadAgentId } from "@/lib/db";
+import { envKey, getAgent, getSetting, inWorkspace, threadAgentId, ws } from "@/lib/db";
 import { fitContext, loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
 import { addUsage, DEFAULT_MODEL, type Usage } from "@/lib/models";
 import { allowedMcp, MCP_PREFIX, mcpApproval, openMcp } from "@/lib/mcp";
@@ -21,7 +21,10 @@ export async function POST(req: Request) {
   const started = Date.now();
   if (!requestAuthed(req)) return new Response("Unauthorized", { status: 401 });
   const { id, message, agentId, context }: { id: string; message: UIMessage; agentId?: string; context?: unknown } = await req.json();
-  const apiKey = open(await getSetting("api_key")) || process.env.ANTHROPIC_API_KEY;
+  // callbacks below can run after the response ends, outside the request: they get the workspace explicitly
+  const w = await ws();
+  const scoped = <T,>(fn: () => Promise<T>) => inWorkspace(w, fn);
+  const apiKey = open(await getSetting("api_key")) || (await envKey("ANTHROPIC_API_KEY"));
   if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
   const budget = Number(process.env.DAILY_BUDGET_USD) || 0;
   if (budget && (await spentToday()) >= budget)
@@ -63,16 +66,16 @@ export async function POST(req: Request) {
   try { after(() => Promise.allSettled(pending)); } catch { /* called directly (tests): no request scope, nothing to keep alive */ }
   const calls: LoggedCall[] = [];
   const stopper = new AbortController();
-  const poll = setInterval(() => void stopRequested(id, started).then((s) => s && stopper.abort(), () => {}), STOP_POLL_MS);
+  const poll = setInterval(() => void scoped(() => stopRequested(id, started)).then((s) => s && stopper.abort(), () => {}), STOP_POLL_MS);
   // ponytail: tokens of a step cut off mid-stream are billed but unseen here; only finished steps are counted
   let usage: Usage | undefined;
   const finish = async (status: "ok" | "error" | "aborted", error?: unknown) => {
     clearInterval(poll);
     await mcp.close();
-    await logRun({
+    await scoped(() => logRun({
       id: runId, threadId: id, agentId: agent?.id, model, started, status, calls, usage,
       error: error == null ? undefined : error instanceof Error ? error.message : String(error),
-    });
+    }));
   };
 
   const result = streamText({
@@ -105,8 +108,8 @@ export async function POST(req: Request) {
       originalMessages: messages,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }), // same id on client and in the DB
       onEnd: async ({ messages }) => {
-        await track(saveChat(id, messages, agent?.id));
-        await track(syncApprovals(runId, id, agent?.id, messages.at(-1))); // approval requests this run produced
+        await track(scoped(() => saveChat(id, messages, agent?.id)));
+        await track(scoped(() => syncApprovals(runId, id, agent?.id, messages.at(-1)))); // approval requests this run produced
       },
     }),
     // drain our own copy of the stream so a closed tab still finishes the turn and saves it (kept alive via after())

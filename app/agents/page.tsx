@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Avatar } from "@/components/avatar";
-import { getSetting, listAgents } from "@/lib/db";
+import { envKey, getSetting, listAgents } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,7 @@ export default async function AgentsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Agents</h1>
-      {!(await getSetting("api_key")) && !process.env.ANTHROPIC_API_KEY && (
+      {!(await getSetting("api_key")) && !(await envKey("ANTHROPIC_API_KEY")) && (
         <p className="text-sm">Add your Anthropic key in <Link href="/settings" className="underline">Settings</Link> to start chatting.</p>
       )}
       <div className="divide-y divide-line border-y border-line">

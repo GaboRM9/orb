@@ -1,6 +1,6 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { db, listSkills } from "./db";
+import { db, listSkills, ws } from "./db";
 import { search } from "./knowledge";
 import { safeFetchText } from "./net-safe";
 import { uiTools } from "./ui-tools";
@@ -35,7 +35,7 @@ export const allTools = {
     description: "Search the titles of the user's saved chat threads.",
     inputSchema: z.object({ query: z.string() }),
     execute: async ({ query }) =>
-      db.prepare("select id,title from threads where title like ? limit 10").all(`%${query}%`),
+      db.prepare("select id,title from threads where workspace_id=? and title like ? limit 10").all(await ws(), `%${query}%`),
   }),
   createSkill: tool({
     description: "Save a reusable skill: a kebab-case name, when to use it, step-by-step instructions, and the tools it needs. The user approves before it is saved.",
@@ -48,7 +48,7 @@ export const allTools = {
     // never overwrites an existing skill; unknown tool names are dropped
     execute: async ({ name, description, body, tools }) => {
       const known = tools.filter((t) => t in allTools && t !== "createSkill");
-      const r = await db.prepare("insert into skills (name,description,body,tools_json,source) values (?,?,?,?,'agent') on conflict(name) do nothing").run(name, description, body, JSON.stringify(known));
+      const r = await db.prepare("insert into skills (workspace_id,name,description,body,tools_json,source) values (?,?,?,?,?,'agent') on conflict(workspace_id, name) do nothing").run(await ws(), name, description, body, JSON.stringify(known));
       return r.changes ? `Saved skill "${name}". The user can attach it to an agent.` : `A skill named "${name}" already exists; pick another name.`;
     },
   }),

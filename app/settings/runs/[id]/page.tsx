@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { db, type Run, type ToolCall } from "@/lib/db";
+import { db, ws, type Run, type ToolCall } from "@/lib/db";
 import { approvalsForRun } from "@/lib/runs";
 
 export const dynamic = "force-dynamic";
 
 export default async function RunDetail({ params }: PageProps<"/settings/runs/[id]">) {
   const { id } = await params;
-  const run = (await db.prepare("select r.*, a.name agent from runs r left join agents a on a.id=r.agent_id where r.id=?").get(id)) as Run | undefined;
+  const w = await ws();
+  const run = (await db.prepare("select r.*, a.name agent from runs r left join agents a on a.id=r.agent_id where r.id=? and r.workspace_id=?").get(id, w)) as Run | undefined;
   if (!run) notFound();
   const calls = (await db.prepare("select * from tool_calls where run_id=? order by id").all(id)) as ToolCall[];
   const approvals = await approvalsForRun(id);
-  const threadExists = !!(await db.prepare("select 1 from threads where id=?").get(run.thread_id));
+  const threadExists = !!(await db.prepare("select 1 from threads where id=? and workspace_id=?").get(run.thread_id, w));
   const facts = [
     ["Agent", run.agent ?? "—"], ["Model", run.model], ["Started", new Date(run.started).toLocaleString()],
     ["Duration", `${run.ms}ms`], ["Tokens in", String(run.input_tokens ?? "—")], ["Tokens out", String(run.output_tokens ?? "—")], ["Status", run.status],

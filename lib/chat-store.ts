@@ -1,5 +1,5 @@
 import { pruneMessages, type ModelMessage, type UIMessage } from "ai";
-import { db } from "./db";
+import { db, ws } from "./db";
 
 // ponytail: ~4 chars per token; swap for a real token count if the budget needs to be exact
 const BUDGET_CHARS = 400_000; // ~100k tokens: leaves room for tools, the reply and this run's tool output
@@ -21,7 +21,7 @@ export function fitContext(messages: ModelMessage[], budget = BUDGET_CHARS) {
 }
 
 export async function loadChat(id: string): Promise<UIMessage[]> {
-  const r = (await db.prepare("select json from messages where thread_id=?").get(id)) as { json: string } | undefined;
+  const r = (await db.prepare("select m.json from messages m join threads t on t.id=m.thread_id where m.thread_id=? and t.workspace_id=?").get(id, await ws())) as { json: string } | undefined;
   return r ? dedupe(JSON.parse(r.json)) : [];
 }
 
@@ -49,8 +49,12 @@ export function mergeMessage(prev: UIMessage[], message: UIMessage): UIMessage[]
 export async function saveChat(id: string, messages: UIMessage[], agentId?: string | null) {
   const first = messages.find((m) => m.role === "user")?.parts.find((p) => p.type === "text");
   const title = (first && "text" in first ? first.text : "New chat").slice(0, 60);
+  const w = await ws();
+  // a thread id that belongs to another workspace is left untouched: neither row is written
   await db.batch([
-    ["insert into threads (id,title,updated,agent_id) values (?,?,?,?) on conflict(id) do update set updated=excluded.updated", id, title, Date.now(), agentId ?? null],
-    ["insert into messages (thread_id,json) values (?,?) on conflict(thread_id) do update set json=excluded.json", id, JSON.stringify(messages)],
+    ["insert into threads (workspace_id,id,title,updated,agent_id) values (?,?,?,?,?) on conflict(id) do update set updated=excluded.updated where threads.workspace_id=excluded.workspace_id",
+      w, id, title, Date.now(), agentId ?? null],
+    ["insert into messages (thread_id,json) select ?,? where exists (select 1 from threads where id=? and workspace_id=?) on conflict(thread_id) do update set json=excluded.json",
+      id, JSON.stringify(messages), id, w],
   ]);
 }

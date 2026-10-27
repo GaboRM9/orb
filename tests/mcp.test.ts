@@ -6,6 +6,8 @@ import { before, describe, it } from "node:test";
 
 process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "mcp-")), "test.db");
 process.env.ADMIN_PASSWORD = "test-pass";
+/* eslint-disable-next-line @typescript-eslint/no-require-imports */
+(require("../lib/db") as typeof import("../lib/db")).workspaceScope.enterWith("default"); // these tests run as the first workspace
 
 let mcp: typeof import("../lib/mcp");
 before(async () => {
