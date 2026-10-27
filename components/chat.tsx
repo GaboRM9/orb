@@ -5,7 +5,7 @@ import { renderUiPart, type ChatMessage } from "./gen-ui";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { OrbIcon } from "./icons";
+import { ArrowUpIcon, OrbIcon, StopIcon } from "./icons";
 
 type ChatAgent = { id: string; name: string; description: string };
 
@@ -15,6 +15,7 @@ const verbs: Record<string, [running: string, done: string]> = {
   calculate: ["Calculating", "Calculated"],
   fetchUrl: ["Reading a web page", "Read a web page"],
   searchThreads: ["Searching chats", "Searched chats"],
+  searchKnowledge: ["Searching your knowledge", "Searched your knowledge"],
   loadSkill: ["Loading a skill", "Loaded a skill"],
   createSkill: ["Saving a skill", "Saved a skill"],
 };
@@ -25,6 +26,39 @@ function approvalSummary(name: string, input: unknown) {
   if (name === "fetchUrl") return `Open ${String(i.url ?? "a web page")}`;
   if (name === "createSkill") return `Save the skill “${String(i.name ?? "")}”`;
   return `Use ${name}`;
+}
+
+type ToolPart = Parameters<typeof getToolName>[0];
+const toolLabel = (p: ToolPart) => {
+  const name = getToolName(p);
+  const [running, finished] = verbs[name] ?? [`Using ${name}`, `Used ${name}`];
+  return p.state === "output-error" ? `${name} failed` : p.state === "output-available" ? finished : `${running}…`;
+};
+const toolJson = (p: ToolPart) => JSON.stringify({ input: p.input, output: "output" in p ? p.output : undefined }, null, 2);
+
+/** Consecutive tool calls collapse into one quiet line; one call keeps its own label. */
+function ToolRun({ parts }: { parts: ToolPart[] }) {
+  if (parts.length === 1)
+    return (
+      <details className="text-xs text-mute">
+        <summary className="cursor-pointer">{toolLabel(parts[0])}</summary>
+        <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono">{toolJson(parts[0])}</pre>
+      </details>
+    );
+  const working = parts.some((p) => p.state !== "output-available" && p.state !== "output-error");
+  return (
+    <details className="text-xs text-mute">
+      <summary className="cursor-pointer">{working ? `Using ${parts.length} tools…` : `Used ${parts.length} tools`}</summary>
+      <div className="mt-1 space-y-2">
+        {parts.map((p, i) => (
+          <div key={i}>
+            <div>{toolLabel(p)}</div>
+            <pre className="overflow-x-auto whitespace-pre-wrap font-mono">{toolJson(p)}</pre>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
 }
 
 export function Chat({ id, initialMessages, agent, agents }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent; agents: { id: string; name: string }[] }) {
@@ -83,49 +117,48 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             <div key={m.id} className={`${m.role === "user" ? "flex justify-end" : "space-y-1"} ${m.id === last?.id ? "rise" : ""}`}>
               {/* the agent's name marks each reply once, not on every block */}
               {m.role === "assistant" && agent && <div className="text-xs text-mute">{agent.name}</div>}
-              <div className={`group space-y-2 text-[15px] leading-7 ${m.role === "user" ? "max-w-[85%] rounded-lg border border-line px-3 py-2" : ""}`}>
-                {m.parts.map((p, i) => {
-                  if (p.type === "text") return <p key={i} className="whitespace-pre-wrap">{p.text}</p>;
-                  if (isToolUIPart(p) && p.state === "approval-requested" && !p.approval.isAutomatic) {
-                    const respond = (approved: boolean) => addToolApprovalResponse({ id: p.approval.id, approved });
-                    return (
-                      <div key={i} className="space-y-3 rounded-lg border border-line p-4">
-                        <div className="text-xs text-mute">Needs your approval</div>
-                        <div className="text-sm">{approvalSummary(getToolName(p), p.input)}</div>
-                        <div className="flex gap-2">
-                          <button className="btn-solid" onClick={() => respond(true)}>Approve</button>
-                          <button className="btn" onClick={() => respond(false)}>Deny</button>
-                        </div>
-                        <details className="text-xs text-mute">
-                          <summary className="cursor-pointer">Details</summary>
-                          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono">{JSON.stringify(p.input, null, 2)}</pre>
-                        </details>
-                      </div>
-                    );
-                  }
-                  const ui = renderUiPart(p, addToolOutput as never);
-                  if (p.type === "reasoning")
-                    return (
-                      <details key={i} className="text-xs text-mute">
-                        <summary className="cursor-pointer">{p.state === "streaming" ? "Thinking…" : "Thought"}</summary>
-                        <p className="mt-1 whitespace-pre-wrap">{p.text}</p>
-                      </details>
-                    );
-                  if (ui) return <div key={i}>{ui}</div>;
-                  if (!isToolUIPart(p)) return null;
-                  const name = getToolName(p);
-                  const done = p.state === "output-available";
-                  const failed = p.state === "output-error";
-                  const [running, finished] = verbs[name] ?? [`Using ${name}`, `Used ${name}`];
-                  return (
-                    <details key={i} className="text-xs text-mute">
-                      <summary className="cursor-pointer">
-                        {failed ? `${name} failed` : done ? finished : `${running}…`}
-                      </summary>
-                      <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono">{JSON.stringify({ input: p.input, output: "output" in p ? p.output : undefined }, null, 2)}</pre>
-                    </details>
-                  );
-                })}
+              <div className={`group space-y-2 text-[15px] leading-7 ${m.role === "user" ? "max-w-[85%] rounded-[22px] bg-surface px-4 py-2.5" : ""}`}>
+                {(() => {
+                  const blocks: React.ReactNode[] = [];
+                  let run: ToolPart[] = [];
+                  const flush = (key: number) => {
+                    if (run.length) blocks.push(<ToolRun key={`run${key}`} parts={run} />);
+                    run = [];
+                  };
+                  m.parts.forEach((p, i) => {
+                    if (p.type === "text") return (flush(i), blocks.push(<p key={i} className="whitespace-pre-wrap">{p.text}</p>));
+                    if (isToolUIPart(p) && p.state === "approval-requested" && !p.approval.isAutomatic) {
+                      const respond = (approved: boolean) => addToolApprovalResponse({ id: p.approval.id, approved });
+                      flush(i);
+                      return blocks.push(
+                        <div key={i} className="space-y-3 rounded-lg bg-surface p-4">
+                          <div className="text-xs text-mute">Needs your approval</div>
+                          <div className="text-sm">{approvalSummary(getToolName(p), p.input)}</div>
+                          <div className="flex gap-2">
+                            <button className="btn-solid" onClick={() => respond(true)}>Approve</button>
+                            <button className="btn" onClick={() => respond(false)}>Deny</button>
+                          </div>
+                          <details className="text-xs text-mute">
+                            <summary className="cursor-pointer">Details</summary>
+                            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono">{JSON.stringify(p.input, null, 2)}</pre>
+                          </details>
+                        </div>,
+                      );
+                    }
+                    if (p.type === "reasoning")
+                      return (flush(i), blocks.push(
+                        <details key={i} className="text-xs text-mute">
+                          <summary className="cursor-pointer">{p.state === "streaming" ? "Thinking…" : "Thought"}</summary>
+                          <p className="mt-1 whitespace-pre-wrap">{p.text}</p>
+                        </details>,
+                      ));
+                    const ui = renderUiPart(p, addToolOutput as never);
+                    if (ui) return (flush(i), blocks.push(<div key={i}>{ui}</div>));
+                    if (isToolUIPart(p)) run.push(p);
+                  });
+                  flush(m.parts.length);
+                  return blocks;
+                })()}
                 {m.role === "assistant" && text && (
                   <button
                     onClick={() => navigator.clipboard?.writeText(text).catch(() => {})}
@@ -142,7 +175,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
         {error && <p className="text-sm text-fg">{error.message}</p>}
         <div ref={end} />
       </div>
-      <div className="space-y-2 pb-8">
+      <div className="space-y-2 pb-6">
         {!messages.length && agents.length > 1 && (
           <select
             aria-label="Agent"
@@ -154,7 +187,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
           </select>
         )}
         <form
-          className="flex items-end gap-2"
+          className="composer flex items-end gap-2 rounded-[26px] border border-line bg-surface py-1.5 pl-5 pr-1.5 shadow-sm transition-shadow focus-within:shadow-[0_0_0_4px_color-mix(in_srgb,var(--fg)_8%,transparent)]"
           onSubmit={(e) => {
             e.preventDefault();
             if (!input.trim() || busy) return;
@@ -165,7 +198,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
           <textarea
             ref={box}
             rows={1}
-            className="field max-h-40 resize-none overflow-y-auto leading-6"
+            className="max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] leading-6 outline-none placeholder:text-mute"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -176,12 +209,16 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
               }
             }}
             placeholder={agent ? `Message ${agent.name}` : "Message"}
+            aria-label="Message"
             autoFocus
             suppressHydrationWarning
           />
-          {busy ? <button type="button" className="btn" onClick={stop}>Stop</button> : <button className="btn-solid">Send</button>}
+          {busy ? (
+            <button type="button" onClick={stop} aria-label="Stop" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fg text-bg"><StopIcon /></button>
+          ) : (
+            <button aria-label="Send" disabled={!input.trim()} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fg text-bg transition-opacity disabled:opacity-20"><ArrowUpIcon /></button>
+          )}
         </form>
-        <p className="text-center text-xs text-mute">Enter to send · Shift+Enter for a new line</p>
       </div>
     </div>
   );
