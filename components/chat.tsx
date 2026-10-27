@@ -2,6 +2,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, lastAssistantMessageIsCompleteWithApprovalResponses, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { renderUiPart, type ChatMessage } from "./gen-ui";
+import { alwaysAllowMcpTool } from "@/lib/actions";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -141,6 +142,12 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
                           <div className="text-sm">{approvalSummary(getToolName(p), p.input)}</div>
                           <div className="flex gap-2">
                             <button className="btn-solid" onClick={() => respond(true)}>Approve</button>
+                            {/* saved before approving, so the resumed turn already runs later calls without asking */}
+                            {getToolName(p).startsWith("mcp_") && (
+                              <button className="btn" title="Later calls to this tool run without asking. Undo in Library → Connections." onClick={async () => { await alwaysAllowMcpTool(getToolName(p)).catch(() => {}); respond(true); }}>
+                                Always allow
+                              </button>
+                            )}
                             <button className="btn" onClick={() => respond(false)}>Deny</button>
                           </div>
                           <details className="peek">

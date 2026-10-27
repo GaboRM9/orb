@@ -2,12 +2,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAuth } from "./auth";
-import { db, getSetting, setSetting } from "./db";
+import { db, getSetting, listMcp, setSetting } from "./db";
 import { parseTheme, type Theme } from "./theme";
 import { seal } from "./secret";
 import { importGithub } from "./github";
 import { addDoc, deleteDoc, deleteFolder, embedMissing } from "./knowledge";
-import { probeMcp } from "./mcp";
+import { clearMcpAllowed, probeMcp, serverForTool, setMcpAllowed } from "./mcp";
 import type { McpServer } from "./db";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -125,6 +125,8 @@ export async function saveMcp(f: FormData) {
   const url = s(f, "url");
   const auth = s(f, "auth");
   if (!name || !validUrl(url)) return;
+  const prev = (await db.prepare("select id, url from mcp_servers where name=?").get(name)) as { id: string; url: string } | undefined;
+  if (prev && prev.url !== url) await clearMcpAllowed(prev.id); // a new address is a different server: re-ask before every call
   await db.prepare(
     "insert into mcp_servers (id,name,url,headers_json) values (?,?,?,?) on conflict(name) do update set url=excluded.url, headers_json=excluded.headers_json",
   ).run(crypto.randomUUID().slice(0, 8), name, url, auth ? seal(JSON.stringify({ Authorization: auth })) : "{}");
@@ -140,6 +142,7 @@ export async function toggleMcp(id: string) {
 export async function deleteMcp(id: string) {
   await requireAuth();
   await db.prepare("delete from mcp_servers where id=?").run(id);
+  await clearMcpAllowed(id);
   // detach from agents so they don't keep a dangling id
   for (const a of (await db.prepare("select id, mcp_json from agents").all()) as { id: string; mcp_json: string }[]) {
     const keep = (JSON.parse(a.mcp_json) as string[]).filter((x) => x !== id);
@@ -209,4 +212,29 @@ export async function importGithubDocs(f: FormData): Promise<{ ok: boolean; text
   } catch (e) {
     return { ok: false, text: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** Gives an agent a connection (the Connections card's "Attach to …" button). */
+export async function attachMcp(serverId: string, agentId: string) {
+  await requireAuth();
+  const a = (await db.prepare("select mcp_json from agents where id=?").get(agentId)) as { mcp_json: string } | undefined;
+  const ids = a ? (JSON.parse(a.mcp_json) as string[]) : null;
+  if (!ids || ids.includes(serverId) || !(await db.prepare("select 1 from mcp_servers where id=?").get(serverId))) return;
+  await db.prepare("update agents set mcp_json=? where id=?").run(JSON.stringify([...ids, serverId]), agentId);
+  revalidatePath("/", "layout");
+}
+
+/** "Always allow" on an approval card: later calls to this MCP tool run without asking. */
+export async function alwaysAllowMcpTool(toolName: string) {
+  await requireAuth();
+  const s = serverForTool(toolName, await listMcp());
+  if (s) await setMcpAllowed(s.id, toolName, true);
+  revalidatePath("/library");
+}
+
+/** Revoke from Library: the tool asks again before every call. */
+export async function revokeMcpTool(serverId: string, toolName: string) {
+  await requireAuth();
+  await setMcpAllowed(serverId, toolName, false);
+  revalidatePath("/library");
 }

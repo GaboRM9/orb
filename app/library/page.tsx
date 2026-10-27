@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { deleteKnowledgeDoc, deleteKnowledgeFolder, deleteMcp, deleteSkill, embedKnowledge, saveMcp, saveSkill, toggleMcp, toggleSkill } from "@/lib/actions";
+import { attachMcp, deleteKnowledgeDoc, deleteKnowledgeFolder, deleteMcp, revokeMcpTool, deleteSkill, embedKnowledge, saveMcp, saveSkill, toggleMcp, toggleSkill } from "@/lib/actions";
 import { GithubImport, KnowledgeUpload } from "@/components/knowledge-upload";
 import { McpTest } from "@/components/mcp-test";
 import { hasEmbeddingKey, listDocs, staleChunks, type Doc } from "@/lib/knowledge";
-import { listMcp, listSkills } from "@/lib/db";
+import { listAgents, listMcp, listSkills, type McpServer } from "@/lib/db";
+import { allowedMcp, mcpToolName } from "@/lib/mcp";
 import { toolInfo, toolNames } from "@/lib/tools";
 
 export const dynamic = "force-dynamic";
@@ -144,13 +145,14 @@ async function Skills({ skill, isNew }: { skill?: string; isNew?: string }) {
 }
 
 async function Connections() {
+  const [servers, agents, allowed] = await Promise.all([listMcp(), listAgents(), allowedMcp()]);
   return (
     <div className="space-y-3">
       <p className="text-xs text-mute">
-        Remote tool servers (Streamable HTTP). Attach them to an agent in its form. Every call to an MCP tool asks for your approval in the chat.
+        Remote tool servers (Streamable HTTP). A server does nothing until it&apos;s attached to an agent. Every call to its tools asks for your approval in the chat, unless you chose Always allow for that tool.
         Credentials are encrypted in data/app.db.
       </p>
-      {(await listMcp()).map((m) => (
+      {servers.map((m) => (
         <div key={m.id} className="space-y-2 card">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -162,6 +164,7 @@ async function Connections() {
               <form action={deleteMcp.bind(null, m.id)}><button className="btn text-xs">Delete</button></form>
             </div>
           </div>
+          <McpUse server={m} agents={agents} allowed={allowed} />
           <McpTest id={m.id} />
         </div>
       ))}
@@ -172,6 +175,37 @@ async function Connections() {
         <input className="field font-mono" name="auth" type="password" placeholder="Authorization header value (optional), e.g. Bearer …" autoComplete="off" />
         <button className="btn-solid">Add</button>
       </form>
+    </div>
+  );
+}
+
+/** Which agents can use a server (a server no agent uses does nothing), and the tools that run without asking. */
+function McpUse({ server, agents, allowed }: { server: McpServer; agents: { id: string; name: string; mcp_json: string }[]; allowed: Set<string> }) {
+  const using = agents.filter((a) => (JSON.parse(a.mcp_json) as string[]).includes(server.id));
+  const others = agents.filter((a) => !using.includes(a));
+  const prefix = mcpToolName(server.name, "");
+  const always = [...allowed].filter((k) => k.startsWith(`${server.id}:`)).map((k) => k.slice(server.id.length + 1));
+  return (
+    <div className="space-y-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={using.length ? "text-mute" : ""}>{using.length ? `Used by ${using.map((a) => a.name).join(", ")}` : "Not attached to any agent yet, so no chat can use it."}</span>
+        {others.map((a) => (
+          <form key={a.id} action={attachMcp.bind(null, server.id, a.id)}>
+            <button className={`${!using.length && a.id === "assistant" ? "btn-solid" : "btn"} !py-1 text-xs`}>Attach to {a.name}</button>
+          </form>
+        ))}
+      </div>
+      {always.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-mute">Runs without asking:</span>
+          {always.map((t) => (
+            <form key={t} action={revokeMcpTool.bind(null, server.id, t)} className="chip inline-flex items-center gap-1.5">
+              <span className="font-mono">{t.startsWith(prefix) ? t.slice(prefix.length) : t}</span>
+              <button className="text-mute hover:text-fg" title="Ask before every call again">Ask again</button>
+            </form>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

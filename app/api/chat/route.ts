@@ -5,7 +5,7 @@ import { requestAuthed } from "@/lib/auth";
 import { getAgent, getSetting, threadAgentId } from "@/lib/db";
 import { fitContext, loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
 import { addUsage, DEFAULT_MODEL, type Usage } from "@/lib/models";
-import { MCP_PREFIX, openMcp } from "@/lib/mcp";
+import { allowedMcp, MCP_PREFIX, mcpApproval, openMcp } from "@/lib/mcp";
 import { open } from "@/lib/secret";
 import { logRun, requestStop, spentToday, stopRequested, syncApprovals, type LoggedCall } from "@/lib/runs";
 import { activeTools, APPROVAL_TOOLS, genUiTools } from "@/lib/tools";
@@ -33,6 +33,7 @@ export async function POST(req: Request) {
   const { tools, skills } = await activeTools(agent && { tools: JSON.parse(agent.tools_json), skills: JSON.parse(agent.skills_json) }, genUi);
   const mcp = await openMcp(agent ? JSON.parse(agent.mcp_json) : []);
   Object.assign(tools, mcp.tools);
+  const allowed = await allowedMcp();
 
   const catalog = skills.map((s) => `- ${s.name}: ${s.description}`).join("\n");
   const mcpHint = Object.keys(mcp.tools).length
@@ -82,7 +83,8 @@ export async function POST(req: Request) {
     stopWhen: isStepCount(MAX_STEPS),
     abortSignal: stopper.signal, // only the Stop button aborts; a closed tab lets the turn finish
     // external and outbound-network tools can have side effects: the user approves each call in the chat
-    toolApproval: ({ toolCall }) => (toolCall.toolName.startsWith(MCP_PREFIX) || APPROVAL_TOOLS.has(toolCall.toolName) ? "user-approval" : undefined),
+    // an MCP tool the user chose to always allow (Library) is approved automatically, which still logs it as an approval
+    toolApproval: ({ toolCall: { toolName: n } }) => (n.startsWith(MCP_PREFIX) ? mcpApproval(n, mcp.owners, allowed) : APPROVAL_TOOLS.has(n) ? "user-approval" : undefined),
     onToolExecutionEnd: ({ toolCall, toolExecutionMs, toolOutput }) => {
       calls.push({
         name: toolCall.toolName,
