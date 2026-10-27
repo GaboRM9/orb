@@ -39,6 +39,16 @@ function init(existing?: Database.Database) {
       thread_id text not null, agent_id text, tool text not null, input text,
       decision text not null default 'pending', automatic integer not null default 0, reason text,
       requested integer not null, decided integer);
+    create table if not exists knowledge_docs (
+      id integer primary key autoincrement, path text unique not null, title text not null,
+      source text not null default 'upload', source_ref text, updated integer not null);
+    create table if not exists knowledge_chunks (
+      id integer primary key autoincrement, doc_id integer not null references knowledge_docs(id) on delete cascade,
+      hash text not null, text text not null, vec blob, embed_model text);
+    create index if not exists knowledge_chunks_doc on knowledge_chunks(doc_id);
+    create virtual table if not exists knowledge_fts using fts5(text);
+    create trigger if not exists knowledge_chunks_ad after delete on knowledge_chunks
+      begin delete from knowledge_fts where rowid = old.id; end;
     create index if not exists runs_started on runs(started desc);
     create table if not exists settings (key text primary key, value text not null);
   `);

@@ -27,11 +27,20 @@ flowchart LR
 
 Each request is one **run**: model, tokens, duration, every tool call and every approve/deny decision are written to SQLite and shown in the Runs tab. The loop stops after 8 steps.
 
+## Knowledge (RAG, Settings → Knowledge)
+
+Upload files or a folder, or import a GitHub repo's docs; they appear as a folder tree. Turn on the `searchKnowledge` tool in an agent and it retrieves the top passages and cites their path.
+
+- **Hybrid search** (`lib/knowledge.ts`): SQLite FTS5 keywords fused with OpenAI `text-embedding-3-small` (512 dims) cosine similarity by reciprocal rank fusion. No vector extension; the scan is ~180 ms at 50k chunks.
+- **Keyword-only without a key.** Set an OpenAI key in Settings → AI (or `OPENAI_API_KEY`) to add embeddings. Failed or missing embeddings never block an import; "Embed now" fills them in.
+- **Minimal inference:** chunks are hashed, so re-imports only embed what changed, and each import embeds in one batched pass. Embeddings are only requested at import time and once per search.
+- **Privacy:** with a key set, document text and search queries are sent to OpenAI.
+
 ## Safety and reliability
 
 - **Approval gate:** every `mcp_*` tool, `fetchUrl` and `createSkill` waits for an explicit approve/deny in the chat (`toolApproval` in `app/api/chat/route.ts`).
 - **SSRF guard:** `fetchUrl` only talks to public http(s) hosts. All resolved addresses are checked (private, loopback, link-local, CGNAT, IPv4-mapped IPv6), redirects are re-validated per hop (max 3), the body is capped at ~64 KB and the request times out at 8 s (`lib/net-safe.ts`).
-- **Untrusted tool output:** the system prompt tells the model that MCP output is data and never instructions.
+- **Untrusted tool output:** the system prompt tells the model that MCP output and knowledge passages are data and never instructions.
 - **Fails closed:** with no `ADMIN_PASSWORD` nobody can sign in. Sessions are HMAC-signed, 7-day tokens, compared in constant time; server actions re-check auth.
 - **Dead MCP servers don't kill a run:** connections time out after 8 s, the server is skipped and the model is told it was unreachable.
 - **Idempotent approval log:** approvals are stored once and decided once, so the same message can be synced on every turn.
