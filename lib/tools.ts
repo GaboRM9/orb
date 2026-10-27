@@ -36,6 +36,21 @@ export const allTools = {
     execute: async ({ query }) =>
       db.prepare("select id,title from threads where title like ? limit 10").all(`%${query}%`),
   }),
+  createSkill: tool({
+    description: "Save a reusable skill: a kebab-case name, when to use it, step-by-step instructions, and the tools it needs. The user approves before it is saved.",
+    inputSchema: z.object({
+      name: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
+      description: z.string().min(1),
+      body: z.string().min(1),
+      tools: z.array(z.string()).default([]).describe("Names of the tools the skill needs"),
+    }),
+    // never overwrites an existing skill; unknown tool names are dropped
+    execute: async ({ name, description, body, tools }) => {
+      const known = tools.filter((t) => t in allTools && t !== "createSkill");
+      const r = await db.prepare("insert into skills (name,description,body,tools_json,source) values (?,?,?,?,'agent') on conflict(name) do nothing").run(name, description, body, JSON.stringify(known));
+      return r.changes ? `Saved skill "${name}". The user can attach it to an agent.` : `A skill named "${name}" already exists; pick another name.`;
+    },
+  }),
 };
 
 /** Built-in tools with outbound side effects: the user approves each call in the chat (MCP tools always do). */
@@ -48,6 +63,7 @@ export const toolInfo: Record<keyof typeof allTools, { label: string; hint: stri
   fetchUrl: { label: "Read web pages", hint: "Opens a link; asks you first" },
   searchKnowledge: { label: "Search your knowledge", hint: "Documents in your Library" },
   searchThreads: { label: "Search past chats", hint: "Titles of your saved conversations" },
+  createSkill: { label: "Save new skills", hint: "Writes reusable instructions; asks you first" },
 };
 /** On for a brand-new agent: everything except outbound network access. */
 export const DEFAULT_TOOLS = ["getTime", "calculate", "searchKnowledge", "searchThreads"];
@@ -64,7 +80,6 @@ export async function activeTools(only?: { tools: string[]; skills: string[] }) 
   const skills = (await listSkills()).filter((s) => s.enabled && (!only || only.skills.includes(s.name)));
   for (const sk of skills) // a skill brings along the tools it needs
     for (const t of JSON.parse(sk.tools_json) as string[]) if (t in allTools) tools[t] = allTools[t as keyof typeof allTools];
-  tools.createSkill = createSkill();
   if (skills.length) tools.loadSkill = loadSkill(skills.map((s) => s.name));
   return { tools, skills };
 }
@@ -74,22 +89,5 @@ function loadSkill(names: string[]) {
     description: "Load the full instructions of a skill by name before applying it.",
     inputSchema: z.object({ name: z.enum(names as [string, ...string[]]) }),
     execute: async ({ name }) => (await listSkills()).find((s) => s.name === name)?.body ?? "not found",
-  });
-}
-
-/** Lets an agent save a reusable skill (approval-gated via APPROVAL_TOOLS); it never overwrites an existing one. */
-function createSkill() {
-  return tool({
-    description: "Save a reusable skill: a kebab-case name, when to use it, step-by-step instructions, and the tools it needs. The user approves before it is saved.",
-    inputSchema: z.object({
-      name: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
-      description: z.string().min(1),
-      body: z.string().min(1),
-      tools: z.array(z.enum(toolNames as [string, ...string[]])).default([]),
-    }),
-    execute: async ({ name, description, body, tools }) => {
-      const r = await db.prepare("insert into skills (name,description,body,tools_json,source) values (?,?,?,?,'agent') on conflict(name) do nothing").run(name, description, body, JSON.stringify(tools));
-      return r.changes ? `Saved skill "${name}". The user can attach it to an agent.` : `A skill named "${name}" already exists; pick another name.`;
-    },
   });
 }

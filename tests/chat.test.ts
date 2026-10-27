@@ -28,9 +28,17 @@ const fake = http.createServer((req, res) => {
       ev("content_block_stop", { index: 0 }) +
       ev("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 7 } }) +
       ev("message_stop", {});
-    if (!body.includes("slowpoke")) return res.end(start + rest);
-    res.write(start); // a slow model: the client can hang up mid-answer
-    setTimeout(() => res.end(rest), 150);
+    if (body.includes("twostep") && !body.includes("tool_result")) // first step: call a tool that needs no approval
+      return res.end(start +
+        ev("content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_1", name: "getTime", input: {} } }) +
+        ev("content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{}" } }) +
+        ev("content_block_stop", { index: 0 }) +
+        ev("message_delta", { delta: { stop_reason: "tool_use", stop_sequence: null }, usage: { output_tokens: 7 } }) +
+        ev("message_stop", {}));
+    const delay = body.includes("sleepy") || body.includes("twostep") ? 3000 : body.includes("slowpoke") ? 150 : 0;
+    if (!delay) return res.end(start + rest);
+    res.write(start); // a slow model: the client can hang up, or press Stop, mid-answer
+    setTimeout(() => res.end(rest), delay).unref();
   });
 });
 
@@ -86,6 +94,16 @@ describe("fitContext", () => {
     assert.equal(out[0].role, "user");
     assert.deepEqual(out.at(-1), msgs.at(-1));
     assert.ok(JSON.stringify(out).length <= 400);
+  });
+});
+
+describe("runCost", () => {
+  it("prices fresh input, cache writes (1.25x), cache reads and output separately", async () => {
+    const { runCost } = await import("../lib/models");
+    // Opus 5.5: $4 in, $20 out, $0.20 cache read per million
+    const cost = runCost("claude-opus-5-5", { inputTokens: 1_300_000, outputTokens: 100_000, inputTokenDetails: { cacheReadTokens: 1_000_000, cacheWriteTokens: 200_000 } });
+    assert.ok(Math.abs(cost! - (0.1 * 4 + 0.2 * 5 + 1 * 0.2 + 0.1 * 20)) < 1e-9);
+    assert.equal(runCost("some-unknown-model", { inputTokens: 1 }), null);
   });
 });
 
@@ -158,10 +176,12 @@ describe("POST /api/chat", () => {
     assert.match(sent.system, /precise research analyst/);
     assert.ok(sent.tools.includes("calculate") && sent.tools.includes("fetchUrl"));
     assert.ok(!sent.tools.includes("searchThreads"), "tools outside the agent's list must not be offered");
+    assert.ok(!sent.tools.includes("createSkill"), "saving skills is opt-in per agent");
 
     assert.equal((await store.loadChat("t1")).length, 2);
     assert.equal(((await dbm.db.prepare("select agent_id from threads where id='t1'").get()) as { agent_id: string }).agent_id, "ada");
-    const run = (await dbm.db.prepare("select * from runs where thread_id='t1'").get()) as { status: string; input_tokens: number; output_tokens: number };
+    const run = (await dbm.db.prepare("select * from runs where thread_id='t1'").get()) as { status: string; input_tokens: number; output_tokens: number; cost: number };
+    assert.ok(Math.abs(run.cost - (11 * 2 + 7 * 10) / 1e6) < 1e-12, "priced at Sonnet 5.5 rates"); // default model
     assert.equal(run.status, "ok");
     assert.equal(run.input_tokens, 11);
     assert.equal(run.output_tokens, 7); // message_delta reports the cumulative output count
@@ -179,6 +199,37 @@ describe("POST /api/chat", () => {
     const reply = async () => JSON.stringify((await store.loadChat("gone"))[1]?.parts ?? []);
     for (let i = 0; i < 50 && !(await reply()).includes("pong"); i++) await new Promise((r) => setTimeout(r, 20));
     assert.match(await reply(), /pong/);
+  });
+
+  it("a stopped run still records the tokens and cost of the steps it finished", async () => {
+    const res = await post({ id: "halt2", message: user("u1", "twostep") }); // step 1 calls getTime, step 2 stalls
+    await new Promise((r) => setTimeout(r, 300));
+    await route.DELETE(new Request("http://x/api/chat?id=halt2", { method: "DELETE", headers: { cookie: `${auth.COOKIE}=${auth.makeToken()}` } }));
+    await res.text();
+    for (let i = 0; i < 50 && !(await dbm.db.prepare("select 1 from runs where thread_id='halt2'").get()); i++) await new Promise((r) => setTimeout(r, 20));
+    const run = (await dbm.db.prepare("select status, cost, input_tokens from runs where thread_id='halt2'").get()) as { status: string; cost: number | null; input_tokens: number | null };
+    assert.equal(run.status, "aborted");
+    assert.equal(run.input_tokens, 11, "step 1's usage counts toward the budget");
+    assert.ok(run.cost! > 0);
+  });
+
+  it("Stop aborts the run on the server and keeps the thread", async () => {
+    const res = await post({ id: "halt", message: user("u1", "sleepy") });
+    const stop = await route.DELETE(new Request("http://x/api/chat?id=halt", { method: "DELETE", headers: { cookie: `${auth.COOKIE}=${auth.makeToken()}` } }));
+    assert.equal(stop.status, 204);
+    const t = Date.now();
+    await res.text(); // ends once the poll sees the flag, long before the model's 3 s answer
+    assert.ok(Date.now() - t < 2000);
+    for (let i = 0; i < 50 && !(await dbm.db.prepare("select 1 from runs where thread_id='halt'").get()); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(((await dbm.db.prepare("select status from runs where thread_id='halt'").get()) as { status: string }).status, "aborted");
+    assert.equal((await store.loadChat("halt"))[0].role, "user");
+  });
+
+  it("refuses new turns once today's budget is spent", async () => {
+    process.env.DAILY_BUDGET_USD = "0.00001"; // the runs above already cost more
+    const res = await post({ id: "broke", message: user("u1", "hi") });
+    delete process.env.DAILY_BUDGET_USD;
+    assert.equal(res.status, 429);
   });
 
   it("keeps the thread's agent on later turns even if the client omits it", async () => {
