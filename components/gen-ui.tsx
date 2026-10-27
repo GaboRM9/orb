@@ -1,19 +1,30 @@
 "use client";
 import type { InferUITools, UIMessage } from "ai";
+import { getToolName, isToolUIPart } from "ai";
 import { useState } from "react";
 import type { retiredUiTools, uiTools } from "@/lib/ui-tools";
+import { SurfaceFrame, type SurfaceResult } from "./surface";
 
 export type ChatMessage = UIMessage<never, never, InferUITools<typeof uiTools & typeof retiredUiTools>>;
 type AddOutput = (a: { tool: string; toolCallId: string; output: unknown }) => void;
 type Part = ChatMessage["parts"][number];
 /** What a rendered part can do: answer a client tool, or send a follow-up message (only from the newest reply, when idle). */
-export type UiCtx = { addOutput: AddOutput; send: (text: string) => void; live: boolean };
+export type UiCtx = { addOutput: AddOutput; send: (text: string) => void; live: boolean; setContext: (toolCallId: string, text: string) => void };
 
 const Title = ({ children }: { children?: string }) => (children ? <div className="mb-3 text-sm font-medium">{children}</div> : null);
 
 /** Returns a component for known UI-tool parts, or null so the caller falls back to the generic card. */
 export function renderUiPart(p: Part, ctx: UiCtx) {
   const { addOutput } = ctx;
+  // surfaces (lib/surfaces) are tools named open_<surface>; they aren't in ChatMessage's types, so match by name
+  const name = isToolUIPart(p) ? getToolName(p) : "";
+  if (isToolUIPart(p) && name.startsWith("open_")) {
+    const surface = name.slice("open_".length);
+    if (p.state === "output-available")
+      return <SurfaceFrame key={p.toolCallId} name={surface} result={p.output as SurfaceResult} live={ctx.live} send={ctx.send} setContext={(t) => ctx.setContext(p.toolCallId, t)} />;
+    if (p.state === "output-error") return <div className="chip !px-4 !py-2">Couldn&apos;t open {surface}: {p.errorText}</div>;
+    return <Skeleton label={`Opening ${surface}…`} />;
+  }
   switch (p.type) {
     case "tool-answerVerdict": {
       const i = p.input;

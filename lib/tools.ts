@@ -4,6 +4,7 @@ import { db, listSkills } from "./db";
 import { search } from "./knowledge";
 import { safeFetchText } from "./net-safe";
 import { uiTools } from "./ui-tools";
+import { surfaceTools } from "./surfaces";
 
 export const allTools = {
   getTime: tool({
@@ -76,6 +77,7 @@ export async function activeTools(only?: { tools: string[]; skills: string[] }) 
   const tools: Record<string, Tool> = {
     ...Object.fromEntries(Object.entries(allTools).filter(([k]) => !off.has(k))),
     ...uiTools,
+    ...surfaceTools(),
   };
   const skills = (await listSkills()).filter((s) => s.enabled && (!only || only.skills.includes(s.name)));
   for (const sk of skills) // a skill brings along the tools it needs
