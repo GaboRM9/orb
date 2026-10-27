@@ -48,6 +48,18 @@ describe("surfaces", () => {
     assert.equal((await ok.json()).summary, "said yo");
   });
 
+  it("directions: OSRM maneuvers read as plain steps", async () => {
+    const { stepText } = await import("../lib/surfaces/directions");
+    const step = (type: string, modifier?: string, name = "Gran Vía") => stepText({ name, distance: 0, maneuver: { type, modifier } });
+    assert.equal(step("depart"), "Head out on Gran Vía");
+    assert.equal(step("turn", "left"), "Turn left onto Gran Vía");
+    assert.equal(step("fork", "slight right"), "Keep slight right onto Gran Vía");
+    assert.equal(step("new name", "straight"), "Continue onto Gran Vía");
+    assert.equal(step("roundabout", "right", ""), "Take the roundabout");
+    assert.equal(step("arrive"), "Arrive");
+    assert.ok("open_directions" in lib.surfaceTools());
+  });
+
   it("surface context from the browser is capped and framed as data", () => {
     assert.equal(ui.surfaceContext(undefined), "");
     assert.equal(ui.surfaceContext([1, "", null]), "");

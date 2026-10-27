@@ -1,22 +1,8 @@
 import { tool, type Tool } from "ai";
-import type { z } from "zod";
+import type { Surface, SurfaceResult } from "./define";
+import { directions } from "./directions";
 
-/**
- * A surface is a small app the agent opens: the model fills `params`, the server runs `fetch`, the chat draws the view
- * (registered by name in components/surfaces). It mirrors MCP Apps: the open_<name> tool is model-visible, the refresh
- * endpoint is the app-visible side, and `summary` is all the model ever sees of the data.
- */
-export type Surface<P extends z.ZodObject = z.ZodObject, D = unknown> = {
-  name: string;
-  title: string;
-  when: string; // when the model should open it
-  params: P;
-  fetch: (params: z.infer<P>) => Promise<D>;
-  summary: (params: z.infer<P>, data: D) => string;
-};
-export type SurfaceResult<D = unknown> = { params: unknown; data: D; summary: string };
-
-export const defineSurface = <P extends z.ZodObject, D>(s: Surface<P, D>) => s as unknown as Surface;
+export { defineSurface, type Surface, type SurfaceResult } from "./define";
 
 // a surface's data is saved with the message and sent to the browser; a runaway response must not bloat every reload
 const MAX_BYTES = 200_000;
@@ -39,6 +25,6 @@ export const surfaceTool = (s: Surface): Tool =>
     toModelOutput: ({ output }) => ({ type: "text", value: (output as SurfaceResult).summary }), // the model gets the summary, the view gets the data
   });
 
-export const surfaces: Record<string, Surface> = {};
+export const surfaces: Record<string, Surface> = { directions };
 
 export const surfaceTools = () => Object.fromEntries(Object.values(surfaces).map((s) => [`${SURFACE_PREFIX}${s.name}`, surfaceTool(s)]));

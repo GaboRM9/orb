@@ -122,4 +122,5 @@ export const UI_HINT = `How to answer:
 Recipes:
 - "Which should I…" / "What are my options…" → answerOptions, a comparison table as evidence.
 - "Should I…" / "Is it…" / "What's the best…" → answerVerdict with the call and why.
-- "How is X doing" / numbers over time → answerVerdict with the headline number, a chart as evidence.`;
+- "How is X doing" / numbers over time → answerVerdict with the headline number, a chart as evidence.
+- "How do I get to…" / "How far is…" → open_directions; pick the mode from the question (walk by default).`;

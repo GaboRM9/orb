@@ -1,6 +1,6 @@
 // How concise and actionable are answers? Runs fixed prompts with the old and the new answer rules and prints,
 // per prompt: words of plain text, the UI tools used, whether the answer ends in actions, and rejected tool calls.
-// Costs real tokens: run it by hand with `npx tsx scripts/eval-ui.ts` (key from Settings or ANTHROPIC_API_KEY).
+// Costs real tokens: run it by hand with `npx tsx scripts/eval-ui.mts` (key from Settings or ANTHROPIC_API_KEY).
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText, isStepCount, type Tool } from "ai";
 import { getSetting } from "../lib/db";
