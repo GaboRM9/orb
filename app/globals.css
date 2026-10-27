@@ -2,8 +2,8 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-:root { --bg: #fff; --surface: #fff; --fg: #000; --mute: #666; --line: #000; --glass: rgb(255 255 255 / 0.85); }
-.dark { --bg: #000; --surface: #000; --fg: #fff; --mute: #999; --line: #fff; --glass: rgb(0 0 0 / 0.85); }
+:root { color-scheme: light; --bg: #fff; --surface: #fff; --fg: #000; --mute: #666; --line: #000; --glass: rgb(255 255 255 / 0.85); }
+.dark { color-scheme: dark; --bg: #000; --surface: #000; --fg: #fff; --mute: #999; --line: #fff; --glass: rgb(0 0 0 / 0.85); }
 
 /* ink theme: pure black on white, inverted in dark mode. Grey is for a few secondary texts only; states invert instead of tinting. */
 @theme inline {
@@ -21,6 +21,7 @@
   --shadow-lg: none;
 }
 
+html { accent-color: var(--fg); } /* native sliders and checkboxes follow the theme */
 html { font-size: 106.25%; } /* 17px root: every rem-based size scales up together */
 body { background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, var(--font-sans), system-ui, sans-serif; -webkit-font-smoothing: antialiased; letter-spacing: -0.006em; }
 h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
@@ -38,10 +39,15 @@ h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
 .rise { animation: rise 0.25s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
 
+/* a hovered pill or row inverts, so grey secondary text inside it must follow, and a selection must not vanish into a solid surface */
+.btn:hover .text-mute, .row-hover:hover .text-mute { color: inherit; }
+.row-hover:hover { background: var(--fg); color: var(--bg); }
+.bg-fg ::selection, .btn:hover ::selection, .btn-solid ::selection, .row-hover:hover ::selection { background: var(--bg); color: var(--fg); }
+
 @layer components {
   /* translucent surface for things that float over content: menus, sticky bars */
   .glass { background: var(--glass); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }
   .field { @apply w-full rounded-md border border-line bg-bg px-4 py-2.5 text-sm outline-none transition-shadow placeholder:text-mute focus:shadow-[0_0_0_1px_var(--fg)]; }
-  .btn { @apply rounded-md border border-line px-4 py-2 text-sm transition-colors hover:bg-fg hover:text-bg disabled:opacity-40; }
-  .btn-solid { @apply rounded-md border border-fg bg-fg px-4 py-2 text-sm text-bg transition-colors hover:bg-bg hover:text-fg disabled:opacity-40; }
+  .btn { @apply rounded-full border border-line px-4 py-2 text-sm transition-colors hover:bg-fg hover:text-bg disabled:opacity-40; }
+  .btn-solid { @apply rounded-full border border-fg bg-fg px-4 py-2 text-sm text-bg transition-colors hover:bg-bg hover:text-fg disabled:opacity-40; }
 }

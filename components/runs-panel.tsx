@@ -3,7 +3,7 @@ import { listAgents } from "@/lib/db";
 import { listApprovals, listRuns, runSummary } from "@/lib/runs";
 
 const fmt = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
-const pill = (on: boolean) => `rounded-sm border px-2.5 py-0.5 text-xs ${on ? "border-fg bg-fg text-bg" : "border-line text-mute hover:text-fg"}`;
+const pill = (on: boolean) => `rounded-full border px-3 py-0.5 text-xs ${on ? "border-fg bg-fg text-bg" : "border-line text-mute hover:text-fg"}`;
 const Th = ({ h }: { h: string }) => <th className="py-1.5 pr-4 font-medium">{h}</th>;
 
 export async function RunsPanel({ view, agent, status }: { view?: string; agent?: string; status?: string }) {
@@ -50,14 +50,14 @@ async function RunsTable({ agent, status }: { agent?: string; status?: string })
         <thead><tr className="border-b border-fg text-xs">{["When", "Agent", "Model", "Time", "Tokens in/out", "Tools", "Status"].map((h) => <Th key={h} h={h} />)}</tr></thead>
         <tbody>
           {runs.map((r) => (
-            <tr key={r.id} className="border-b border-line hover:bg-line/40">
+            <tr key={r.id} className="border-b border-line row-hover">
               <td className="py-1.5 pr-4"><Link href={`/settings/runs/${r.id}`} className="underline underline-offset-2">{new Date(r.started).toLocaleString()}</Link></td>
               <td className="pr-4">{r.agent ?? <span className="text-mute">—</span>}</td>
               <td className="pr-4 font-mono text-xs">{r.model}</td>
               <td className="pr-4 font-mono text-xs">{fmt(r.ms)}</td>
               <td className="pr-4 font-mono text-xs">{r.input_tokens ?? "—"} / {r.output_tokens ?? "—"}</td>
               <td className="pr-4 font-mono text-xs">{r.calls}</td>
-              <td><span className={`rounded-sm border px-2 py-0.5 text-xs ${r.status === "ok" ? "border-line text-mute" : "border-fg"}`}>{r.status}</span></td>
+              <td><span className={`rounded-full border border-current px-2.5 py-0.5 text-xs ${r.status === "ok" ? "text-mute" : ""}`}>{r.status}</span></td>
             </tr>
           ))}
         </tbody>
@@ -75,7 +75,7 @@ async function ApprovalsTable({ agent, status }: { agent?: string; status?: stri
         <thead><tr className="border-b border-fg text-xs">{["Requested", "Agent", "Tool", "Input", "Decision", "Took"].map((h) => <Th key={h} h={h} />)}</tr></thead>
         <tbody>
           {rows.map((a) => (
-            <tr key={a.id} className="border-b border-line hover:bg-line/40">
+            <tr key={a.id} className="border-b border-line row-hover">
               <td className="py-1.5 pr-4">
                 {a.run_id ? <Link href={`/settings/runs/${a.run_id}`} className="underline underline-offset-2">{new Date(a.requested).toLocaleString()}</Link> : new Date(a.requested).toLocaleString()}
               </td>
@@ -83,7 +83,7 @@ async function ApprovalsTable({ agent, status }: { agent?: string; status?: stri
               <td className="pr-4 font-mono text-xs">{a.tool}</td>
               <td className="max-w-48 truncate pr-4 font-mono text-xs text-mute" title={a.input ?? ""}>{a.input}</td>
               <td className="pr-4">
-                <span className={`rounded-sm border px-2 py-0.5 text-xs ${a.decision === "pending" ? "border-line text-mute" : "border-fg"}`}>{a.decision}{a.automatic ? " (auto)" : ""}</span>
+                <span className={`rounded-full border border-current px-2.5 py-0.5 text-xs ${a.decision === "pending" ? "text-mute" : ""}`}>{a.decision}{a.automatic ? " (auto)" : ""}</span>
               </td>
               <td className="font-mono text-xs">{a.decided ? fmt(a.decided - a.requested) : "waiting"}</td>
             </tr>

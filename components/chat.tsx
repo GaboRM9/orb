@@ -181,7 +181,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             aria-label="Agent"
             value={agent?.id}
             onChange={(e) => router.replace(`/chat/${id}?agent=${e.target.value}`)}
-            className="rounded-md border border-line bg-bg px-3 py-1 text-xs outline-none hover:shadow-[0_0_0_1px_var(--fg)]"
+            className="rounded-full border border-line bg-bg px-3 py-1 text-xs outline-none hover:shadow-[0_0_0_1px_var(--fg)]"
           >
             {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>

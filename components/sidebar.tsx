@@ -64,7 +64,7 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
               const here = path === `/chat/${t.id}`;
               return (
                 <div key={t.id} className="group relative">
-                  <Link href={`/chat/${t.id}`} onClick={close} className={`${item(here)} rounded-md !py-1.5 !pr-9 !text-sm`}>
+                  <Link href={`/chat/${t.id}`} onClick={close} className={`${item(here)} rounded-full !py-1.5 !pl-4 !pr-9 !text-sm`}>
                     {t.title || "Untitled"}
                   </Link>
                   <form action={deleteThread.bind(null, t.id, here ? "/" : path)} className={`absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 ${here ? "text-bg" : "text-fg"}`}>
@@ -83,7 +83,7 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
               onClick={close}
               aria-label={collapsed ? label : undefined}
               title={collapsed ? label : undefined}
-              className={`${item(on(prefix))} flex items-center gap-3 rounded-md`}
+              className={`${item(on(prefix))} flex items-center gap-3 rounded-full !px-4`}
             >
               <Icon /><span className={hideWhenCollapsed}>{label}</span>
             </Link>
