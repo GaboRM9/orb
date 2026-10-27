@@ -46,7 +46,7 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
         <button onClick={() => setOpen(true)} aria-label="Open menu" className="btn grid h-9 w-9 place-items-center p-0 text-mute hover:text-fg">
           <MenuIcon />
         </button>
-        <div className="flex items-center gap-2 font-mono text-sm font-light tracking-[0.3em]"><OrbIcon className="h-5 w-5" />orbz</div>
+        <div className="flex items-center gap-2 font-mono text-sm font-light tracking-[0.3em]"><OrbIcon className="h-5 w-5" />orb</div>
       </header>
       {open && <div onClick={close} className="fixed inset-0 z-30 bg-black/30 md:hidden" aria-hidden />}
       <aside
@@ -54,7 +54,7 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
       >
         <div className="flex min-h-0 flex-col">
           <div className="mb-10 flex items-center gap-2.5 px-2 font-mono text-base font-light tracking-[0.3em]">
-            <OrbIcon className="h-6 w-6" /><span className={hideWhenCollapsed}>orbz</span>
+            <OrbIcon className="h-6 w-6" /><span className={hideWhenCollapsed}>orb</span>
           </div>
           <nav className="flex min-h-0 flex-col gap-1 overflow-y-auto">
             {tabs.map(([label, href, Icon, prefix]) => (

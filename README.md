@@ -1,4 +1,4 @@
-# orbz
+# orb
 
 [![ci](https://github.com/GaboRM9/orbz/actions/workflows/ci.yml/badge.svg)](https://github.com/GaboRM9/orbz/actions/workflows/ci.yml)
 
