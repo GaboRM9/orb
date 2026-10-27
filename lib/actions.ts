@@ -1,8 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAuth } from "./auth";
-import { db, getSetting, listMcp, setSetting, ws } from "./db";
+import { db, getSetting, listMcp, requireAuth, setSetting, ws } from "./db";
 import { parseTheme, type Theme } from "./theme";
 import { seal } from "./secret";
 import { importGithub } from "./github";

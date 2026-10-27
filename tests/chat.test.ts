@@ -63,10 +63,13 @@ before(async () => {
   ]);
   await dbm.db.prepare("insert into agents (id,name,instructions,tools_json,skills_json) values ('ada','Ada','You are Ada, a precise research analyst.',?,?)")
     .run(JSON.stringify(["getTime", "calculate", "fetchUrl"]), JSON.stringify(["concise-writer"]));
+  await dbm.db.prepare("insert into users (id, email, pass_hash, created) values ('u1', 'ada@x.test', ?, 0)").run(auth.hashPassword("pw"));
+  await dbm.db.prepare("insert into members (workspace_id, user_id, role) values ('default', 'u1', 'admin')").run();
 });
+const tok = () => auth.makeToken("u1", "default", 0);
 after(() => fake.close());
 
-const post = (body: object, cookie = `${auth.COOKIE}=${auth.makeToken()}`) =>
+const post = (body: object, cookie = `${auth.COOKIE}=${tok()}`) =>
   route.POST(new Request("http://x/api/chat", { method: "POST", headers: { cookie }, body: JSON.stringify(body) }));
 
 describe("mergeMessage", () => {
@@ -226,7 +229,7 @@ describe("POST /api/chat", () => {
   it("a stopped run still records the tokens and cost of the steps it finished", async () => {
     const res = await post({ id: "halt2", message: user("u1", "twostep") }); // step 1 calls getTime, step 2 stalls
     await new Promise((r) => setTimeout(r, 300));
-    await route.DELETE(new Request("http://x/api/chat?id=halt2", { method: "DELETE", headers: { cookie: `${auth.COOKIE}=${auth.makeToken()}` } }));
+    await route.DELETE(new Request("http://x/api/chat?id=halt2", { method: "DELETE", headers: { cookie: `${auth.COOKIE}=${tok()}` } }));
     await res.text();
     for (let i = 0; i < 50 && !(await dbm.db.prepare("select 1 from runs where thread_id='halt2'").get()); i++) await new Promise((r) => setTimeout(r, 20));
     const run = (await dbm.db.prepare("select status, cost, input_tokens from runs where thread_id='halt2'").get()) as { status: string; cost: number | null; input_tokens: number | null };
@@ -237,7 +240,7 @@ describe("POST /api/chat", () => {
 
   it("Stop aborts the run on the server and keeps the thread", async () => {
     const res = await post({ id: "halt", message: user("u1", "sleepy") });
-    const stop = await route.DELETE(new Request("http://x/api/chat?id=halt", { method: "DELETE", headers: { cookie: `${auth.COOKIE}=${auth.makeToken()}` } }));
+    const stop = await route.DELETE(new Request("http://x/api/chat?id=halt", { method: "DELETE", headers: { cookie: `${auth.COOKIE}=${tok()}` } }));
     assert.equal(stop.status, 204);
     const t = Date.now();
     await res.text(); // ends once the poll sees the flag, long before the model's 3 s answer
@@ -265,24 +268,38 @@ describe("POST /api/chat", () => {
 describe("auth", () => {
   it("rejects chat requests without a valid session", async () => {
     assert.equal((await post({ id: "a", message: {} }, "")).status, 401);
-    assert.equal((await post({ id: "a", message: {} }, `${auth.COOKIE}=${auth.makeToken()}x`)).status, 401);
-  });
-  it("accepts only the right password, and fails closed when none is set", async () => {
-    assert.ok(auth.passwordOk("test-pass"));
-    assert.ok(!auth.passwordOk("nope"));
-    const [exp] = auth.makeToken().split(".");
-    assert.ok(!auth.verifyToken(`${exp}.forged`));
-    assert.ok(!auth.verifyToken(`1.${auth.makeToken().split(".")[1]}`)); // expired
-    const saved = process.env.ADMIN_PASSWORD;
-    delete process.env.ADMIN_PASSWORD;
-    assert.ok(!auth.verifyToken(auth.makeToken()));
-    process.env.ADMIN_PASSWORD = saved;
+    assert.equal((await post({ id: "a", message: {} }, `${auth.COOKIE}=${tok()}x`)).status, 401);
   });
 
-  it("on Vercel, requires AUTH_SECRET instead of falling back to the password", () => {
+  it("signs in by email and password; unknown emails and wrong passwords fail", async () => {
+    assert.deepEqual(await dbm.signIn("ADA@x.test", "pw"), { uid: "u1", workspace: "default", tokenV: 0 });
+    assert.equal(await dbm.signIn("ada@x.test", "nope"), null);
+    assert.equal(await dbm.signIn("nobody@x.test", "pw"), null);
+  });
+
+  it("a session needs its signature, an unexpired token, the membership and the current token_v", async () => {
+    const t = tok();
+    assert.deepEqual(await dbm.sessionFor(t), { uid: "u1", workspace: "default", role: "admin" });
+    assert.equal(await dbm.sessionFor(`${t.slice(0, t.lastIndexOf("."))}.forged`), null);
+    const now = Date.now;
+    Date.now = () => now() + (auth.SESSION_SECONDS + 1) * 1000;
+    try {
+      assert.equal(await dbm.sessionFor(t), null, "expired");
+    } finally {
+      Date.now = now;
+    }
+    assert.equal(await dbm.sessionFor(auth.makeToken("u1", "acme", 0)), null, "not a member there");
+    await dbm.db.prepare("insert into users (id, email, pass_hash, created) values ('u2', 'bo@x.test', 'x', 0)").run();
+    await dbm.db.prepare("insert into members (workspace_id, user_id) values ('default', 'u2')").run();
+    const t2 = auth.makeToken("u2", "default", 0);
+    await dbm.db.prepare("update users set token_v = 1 where id = 'u2'").run();
+    assert.equal(await dbm.sessionFor(t2), null, "signed out everywhere");
+  });
+
+  it("fails closed without a secret; on Vercel the password doesn't count as one", () => {
     process.env.VERCEL = "1";
     assert.ok(!auth.authConfigured());
-    assert.ok(!auth.passwordOk("test-pass"));
+    assert.ok(!auth.verifyToken(tok()));
     process.env.AUTH_SECRET = "s3cret";
     assert.ok(auth.authConfigured());
     delete process.env.VERCEL;
