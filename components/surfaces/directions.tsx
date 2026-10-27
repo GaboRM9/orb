@@ -55,7 +55,8 @@ function RouteMap({ data }: { data: DirectionsData }) {
     let gone = false;
     import("leaflet").then((L) => {
       if (gone || !box.current) return;
-      map = L.map(box.current, { zoomControl: false, attributionControl: true, scrollWheelZoom: false });
+      // the map sits inside a scrolling chat: wheel and (on touch) one-finger drags scroll the page; pinch still pans and zooms
+      map = L.map(box.current, { zoomControl: false, attributionControl: true, scrollWheelZoom: false, dragging: !L.Browser.mobile });
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
       const line = L.polyline(data.line, { className: "route-line", weight: 5 }).addTo(map);
       for (const p of [data.from, data.to]) L.circleMarker([p.lat, p.lng], { className: "route-dot", radius: 6, weight: 3 }).addTo(map);

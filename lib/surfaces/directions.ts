@@ -23,10 +23,32 @@ const get = async (url: string) => {
   return r.json();
 };
 
-async function geocode(q: string): Promise<Place> {
-  const [hit] = (await get(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`)) as { display_name: string; lat: string; lon: string }[];
-  if (!hit) throw new Error(`Couldn't find "${q}"`);
-  return { name: hit.display_name.split(",").slice(0, 2).join(",").trim(), lat: +hit.lat, lng: +hit.lon };
+// Nominatim's policy: at most one request per second, and cache what you get. A mode switch or Reverse reuses both places.
+// ponytail: per server instance and lost on restart; a shared store if there are many instances.
+const places = new Map<string, Promise<Place>>();
+const MAX_PLACES = 500;
+let nextSlot = 0;
+const nominatimTurn = () => {
+  const now = Date.now();
+  const wait = Math.max(0, nextSlot - now);
+  nextSlot = Math.max(now, nextSlot) + 1000; // claim the next free second before waiting, so concurrent calls queue up
+  return new Promise((r) => setTimeout(r, wait));
+};
+
+export function geocode(q: string): Promise<Place> {
+  const key = q.trim().toLowerCase();
+  const cached = places.get(key);
+  if (cached) return cached;
+  const p = (async () => {
+    await nominatimTurn();
+    const [hit] = (await get(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`)) as { display_name: string; lat: string; lon: string }[];
+    if (!hit) throw new Error(`Couldn't find "${q}"`);
+    return { name: hit.display_name.split(",").slice(0, 2).join(",").trim(), lat: +hit.lat, lng: +hit.lon };
+  })();
+  places.set(key, p);
+  p.catch(() => places.delete(key)); // a failure isn't cached: the next try asks again
+  if (places.size > MAX_PLACES) places.delete(places.keys().next().value!); // oldest first
+  return p;
 }
 
 type OsrmStep = { name: string; distance: number; maneuver: { type: string; modifier?: string } };
@@ -51,8 +73,7 @@ export const directions = defineSurface({
     mode: z.enum(["walk", "bike", "drive"]).default("walk"),
   }),
   async fetch({ from, to, mode }): Promise<DirectionsData> {
-    const a = await geocode(from); // one at a time: Nominatim's limit is one request per second
-    const b = await geocode(to);
+    const [a, b] = await Promise.all([geocode(from), geocode(to)]); // cached, and spaced a second apart when not
     const r = (await get(`https://routing.openstreetmap.de/${PROFILE[mode]}/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=simplified&geometries=geojson&steps=true`)) as {
       code: string;
       routes?: { distance: number; duration: number; geometry: { coordinates: [number, number][] }; legs: { steps: OsrmStep[] }[] }[];

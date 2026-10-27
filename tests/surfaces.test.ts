@@ -60,6 +60,29 @@ describe("surfaces", () => {
     assert.ok("open_directions" in lib.surfaceTools());
   });
 
+  it("directions: places are cached and Nominatim calls spaced a second apart", async () => {
+    const { geocode } = await import("../lib/surfaces/directions");
+    const real = globalThis.fetch;
+    const calls: number[] = [];
+    globalThis.fetch = (async (url: string) => {
+      calls.push(Date.now());
+      const missing = String(url).includes("nowhere");
+      return new Response(JSON.stringify(missing ? [] : [{ display_name: "Sol, Madrid, Spain", lat: "40.4", lon: "-3.7" }]));
+    }) as typeof fetch;
+    try {
+      const [a, b] = await Promise.all([geocode("Sol, Madrid"), geocode("Retiro, Madrid")]);
+      assert.equal(a.name, "Sol, Madrid");
+      assert.ok(calls[1] - calls[0] >= 950, `second call came ${calls[1] - calls[0]}ms after the first`);
+      await geocode("  sol, MADRID "); // same place, other spelling: no new request
+      assert.equal(calls.length, 2);
+      await assert.rejects(geocode("nowhere"), /Couldn't find/);
+      await assert.rejects(geocode("nowhere"), /Couldn't find/); // a miss isn't cached
+      assert.equal(calls.length, 4);
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
   it("surface context from the browser is capped and framed as data", () => {
     assert.equal(ui.surfaceContext(undefined), "");
     assert.equal(ui.surfaceContext([1, "", null]), "");
