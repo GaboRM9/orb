@@ -32,11 +32,11 @@ export function AgentForm({ agent }: { agent?: Agent }) {
           </select>
         </label>
       </Section>
-      {/* new agents start with the capabilities open; existing ones keep them folded and show what they have */}
+      {/* new agents start with abilities open; existing ones keep them folded and show what they have */}
       <details open={!agent} className="border-t border-line pt-6">
         <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium [&::-webkit-details-marker]:hidden">
-          <span>Capabilities</span>
-          <span className="font-mono text-xs font-normal text-mute">{tools.length} tools · {skills.length} skills · {mcp.length} MCP</span>
+          <span>Abilities</span>
+          <span className="font-mono text-xs font-normal text-mute">{tools.length} tools · {skills.length} skills · {mcp.length} connections</span>
         </summary>
         <div className="mt-6 space-y-8">
           <fieldset className="space-y-2 text-sm">
@@ -57,7 +57,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
           </fieldset>
           {servers.length > 0 && (
             <fieldset className="space-y-2 text-sm">
-              <legend className="mb-2 text-mute">MCP servers <span>(each tool call asks for approval)</span></legend>
+              <legend className="mb-2 text-mute">Connections <span>(each tool call asks for approval)</span></legend>
               {servers.map((m) => (
                 <label key={m.id} className="mr-4 inline-flex items-center gap-2 font-mono text-xs">
                   <input type="checkbox" name="mcp" value={m.id} defaultChecked={mcp.includes(m.id)} className="accent-current" /> {m.name}

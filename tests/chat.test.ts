@@ -49,6 +49,8 @@ before(async () => {
   [store, dbm, runs, net, route, auth] = await Promise.all([
     import("../lib/chat-store"), import("../lib/db"), import("../lib/runs"), import("../lib/net-safe"), import("../app/api/chat/route"), import("../lib/auth"),
   ]);
+  dbm.db.prepare("insert into agents (id,name,instructions,tools_json,skills_json) values ('ada','Ada','You are Ada, a precise research analyst.',?,?)")
+    .run(JSON.stringify(["getTime", "calculate", "fetchUrl"]), JSON.stringify(["concise-writer"]));
 });
 after(() => fake.close());
 

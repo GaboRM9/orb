@@ -18,7 +18,7 @@ export default async function RunDetail({ params }: PageProps<"/settings/runs/[i
   ];
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-10 py-14">
-      <Link href="/settings?tab=runs" className="text-xs text-mute hover:text-fg">← Settings · Runs</Link>
+      <Link href="/settings?tab=runs" className="text-xs text-mute hover:text-fg">← Run history</Link>
       <h1>Run {run.id}</h1>
       <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-line p-4 text-sm sm:grid-cols-4">
         {facts.map(([k, v]) => <div key={k}><dt className="text-xs text-mute">{k}</dt><dd className="font-mono text-xs">{v}</dd></div>)}

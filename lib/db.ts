@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "fs";
 import { dirname } from "path";
+import { isSealed, seal } from "./secret";
 
 const DB_PATH = process.env.DB_PATH ?? "data/app.db";
 
@@ -48,6 +49,11 @@ function init(existing?: Database.Database) {
   if (!(db.pragma("table_info(threads)") as { name: string }[]).some((c) => c.name === "agent_id"))
     db.exec("alter table threads add column agent_id text");
   db.exec("delete from messages where thread_id not in (select id from threads)"); // orphans from before FKs were on
+  // encrypt credentials saved before encryption existed
+  for (const r of db.prepare("select key, value from settings where key='api_key'").all() as { key: string; value: string }[])
+    if (!isSealed(r.value)) db.prepare("update settings set value=? where key=?").run(seal(r.value), r.key);
+  for (const r of db.prepare("select id, headers_json h from mcp_servers where headers_json != '{}'").all() as { id: string; h: string }[])
+    if (!isSealed(r.h)) db.prepare("update mcp_servers set headers_json=? where id=?").run(seal(r.h), r.id);
   const n = db.prepare("select count(*) c from skills").get() as { c: number };
   if (!n.c)
     db.prepare("insert into skills (name, description, body) values (?,?,?)").run(
@@ -59,12 +65,6 @@ function init(existing?: Database.Database) {
     const ins = db.prepare("insert into agents (id,name,description,instructions,tools_json,skills_json) values (?,?,?,?,?,?)");
     ins.run("assistant", "Assistant", "General-purpose helper. Start here.",
       "You are a helpful, concise assistant.", JSON.stringify(["getTime", "calculate"]), JSON.stringify([]));
-    ins.run("ada", "Ada", "Research analyst. Fast, factual, shows her math.",
-      "You are Ada, a precise research analyst. Verify facts with tools, show calculations, and present results with tables or charts.",
-      JSON.stringify(["getTime", "calculate", "fetchUrl"]), JSON.stringify(["concise-writer"]));
-    ins.run("milo", "Milo", "Trip planner. Asks questions, builds itineraries.",
-      "You are Milo, a friendly trip planner. Collect preferences with a form first, then present plans with timelines, maps and cards.",
-      JSON.stringify(["getTime"]), JSON.stringify([]));
   }
   return db;
 }
