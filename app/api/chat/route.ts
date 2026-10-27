@@ -4,20 +4,27 @@ import { consumeStream, convertToModelMessages, createIdGenerator, createUIMessa
 import { requestAuthed } from "@/lib/auth";
 import { getAgent, getSetting, threadAgentId } from "@/lib/db";
 import { fitContext, loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
-import { DEFAULT_MODEL } from "@/lib/models";
+import { DEFAULT_MODEL, type Usage } from "@/lib/models";
 import { MCP_PREFIX, openMcp } from "@/lib/mcp";
 import { open } from "@/lib/secret";
-import { logRun, syncApprovals, type LoggedCall } from "@/lib/runs";
+import { logRun, requestStop, spentToday, stopRequested, syncApprovals, type LoggedCall } from "@/lib/runs";
 import { activeTools, APPROVAL_TOOLS } from "@/lib/tools";
 
 export const maxDuration = 300; // agent runs with several tool calls outlast the old 60s
 const CACHE = { anthropic: { cacheControl: { type: "ephemeral" } } } as const;
+const MAX_STEPS = 25;
+// ponytail: polls the database for the Stop flag; a pub/sub channel if runs ever need instant stops
+const STOP_POLL_MS = 500;
 
 export async function POST(req: Request) {
+  const started = Date.now();
   if (!requestAuthed(req)) return new Response("Unauthorized", { status: 401 });
   const { id, message, agentId }: { id: string; message: UIMessage; agentId?: string } = await req.json();
   const apiKey = open(await getSetting("api_key")) || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
+  const budget = Number(process.env.DAILY_BUDGET_USD) || 0;
+  if (budget && (await spentToday()) >= budget)
+    return new Response(`Today's budget of $${budget} is used up. It resets at midnight.`, { status: 429 });
 
   const messages = mergeMessage(await loadChat(id), message);
   const agent = await getAgent((await threadAgentId(id)) ?? agentId); // a thread keeps the agent it started with
@@ -50,13 +57,14 @@ export async function POST(req: Request) {
   const pending: Promise<unknown>[] = [];
   const track = <T,>(p: Promise<T>) => (pending.push(p), p);
   try { after(() => Promise.allSettled(pending)); } catch { /* called directly (tests): no request scope, nothing to keep alive */ }
-  const started = Date.now();
   const calls: LoggedCall[] = [];
-  const finish = async (status: "ok" | "error" | "aborted", usage?: { inputTokens?: number; outputTokens?: number }, error?: unknown) => {
+  const stopper = new AbortController();
+  const poll = setInterval(() => void stopRequested(id, started).then((s) => s && stopper.abort(), () => {}), STOP_POLL_MS);
+  const finish = async (status: "ok" | "error" | "aborted", usage?: Usage, error?: unknown) => {
+    clearInterval(poll);
     await mcp.close();
     await logRun({
-      id: runId, threadId: id, agentId: agent?.id, model, started, status, calls,
-      inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens,
+      id: runId, threadId: id, agentId: agent?.id, model, started, status, calls, usage,
       error: error == null ? undefined : error instanceof Error ? error.message : String(error),
     });
   };
@@ -66,7 +74,8 @@ export async function POST(req: Request) {
     instructions,
     messages: history,
     tools,
-    stopWhen: isStepCount(8),
+    stopWhen: isStepCount(MAX_STEPS),
+    abortSignal: stopper.signal, // only the Stop button aborts; a closed tab lets the turn finish
     // external and outbound-network tools can have side effects: the user approves each call in the chat
     toolApproval: ({ toolCall }) => (toolCall.toolName.startsWith(MCP_PREFIX) || APPROVAL_TOOLS.has(toolCall.toolName) ? "user-approval" : undefined),
     onToolExecutionEnd: ({ toolCall, toolExecutionMs, toolOutput }) => {
@@ -95,4 +104,13 @@ export async function POST(req: Request) {
     // drain our own copy of the stream so a closed tab still finishes the turn and saves it (kept alive via after())
     consumeSseStream: ({ stream }) => track(consumeStream({ stream })),
   });
+}
+
+/** Stop button: flags the thread; its running turn sees the flag within STOP_POLL_MS and aborts, keeping what it has so far. */
+export async function DELETE(req: Request) {
+  if (!requestAuthed(req)) return new Response("Unauthorized", { status: 401 });
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) return new Response("Missing id", { status: 400 });
+  await requestStop(id);
+  return new Response(null, { status: 204 });
 }

@@ -33,7 +33,11 @@ flowchart LR
   T --> L[(runs · tool_calls · approvals)]
 ```
 
-Each request is one **run**: model, tokens, duration, every tool call and every approve/deny decision are written to the database and shown under Settings → Activity. The loop stops after 8 steps.
+Each request is one **run**: model, tokens (including cache reads/writes), cost, duration, every tool call and every approve/deny decision are written to the database and shown under Settings → Activity. The loop stops after 25 steps.
+
+- **Stop** really stops: the button flags the thread in the database (`DELETE /api/chat?id=…`) and the running turn, on whichever instance, aborts within half a second and keeps what it has. Closing the tab does *not* stop a run: it finishes and is saved.
+- **Daily budget:** set `DAILY_BUDGET_USD` and new turns are refused (429) once the day's runs cost that much. Costs use list prices in `lib/models.ts`.
+- **Long threads** are trimmed to ~100k tokens before sending (old tool output first, then the oldest turns); the system prompt, tools and history are prompt-cached.
 
 ## Knowledge (RAG, Library → Knowledge)
 
@@ -46,7 +50,7 @@ Upload files or a folder, or import a GitHub repo's docs; they appear as a folde
 
 ## Safety and reliability
 
-- **Approval gate:** every `mcp_*` tool, `fetchUrl` and `createSkill` waits for an explicit approve/deny in the chat (`toolApproval` in `app/api/chat/route.ts`).
+- **Approval gate:** every `mcp_*` tool, `fetchUrl` and `createSkill` waits for an explicit approve/deny in the chat (`toolApproval` in `app/api/chat/route.ts`). `createSkill` is off unless an agent has "Save new skills" turned on.
 - **SSRF guard:** `fetchUrl` only talks to public http(s) hosts. All resolved addresses are checked (private, loopback, link-local, CGNAT, IPv4-mapped IPv6), redirects are re-validated per hop (max 3), the body is capped at ~64 KB and the request times out at 8 s (`lib/net-safe.ts`).
 - **Untrusted tool output:** the system prompt tells the model that MCP output and knowledge passages are data and never instructions.
 - **Fails closed:** with no `ADMIN_PASSWORD` nobody can sign in. Sessions are HMAC-signed, 7-day tokens, compared in constant time; server actions re-check auth.

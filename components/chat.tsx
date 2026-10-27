@@ -214,7 +214,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             suppressHydrationWarning
           />
           {busy ? (
-            <button type="button" onClick={stop} aria-label="Stop" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fg text-bg"><StopIcon /></button>
+            <button type="button" onClick={() => { stop(); void fetch(`/api/chat?id=${encodeURIComponent(id)}`, { method: "DELETE" }); }} aria-label="Stop" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fg text-bg"><StopIcon /></button>
           ) : (
             <button aria-label="Send" disabled={!input.trim()} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-fg bg-fg text-bg disabled:bg-bg disabled:text-fg"><ArrowUpIcon /></button>
           )}
