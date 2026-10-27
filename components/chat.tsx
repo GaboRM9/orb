@@ -120,8 +120,8 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
           const live = busy && m.id === last?.id && m.role === "assistant";
           return (
             // no bubbles: a line in the margin says who's speaking, and pulses while the agent works
-            <div key={m.id} className={`turn ${m.role === "assistant" ? "turn-agent" : ""} ${live ? "turn-live" : ""} ${m.id === last?.id ? "rise" : ""}`}>
-              <div className="mb-1 text-xs text-mute">{m.role === "user" ? "You" : name}</div>
+            <div key={m.id} className={`turn ${m.role === "assistant" ? "turn-agent" : "turn-user"} ${live ? "turn-live" : ""} ${m.id === last?.id ? "rise" : ""}`}>
+              <div className={`mb-1 text-xs text-mute ${m.role === "user" ? "text-right" : ""}`}>{m.role === "user" ? "You" : name}</div>
               <div className="group space-y-3 text-sm leading-7">
                 {(() => {
                   const blocks: React.ReactNode[] = [];
