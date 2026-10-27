@@ -20,7 +20,7 @@ export default async function RunDetail({ params }: PageProps<"/settings/runs/[i
     <div className="mx-auto max-w-3xl space-y-6 px-10 py-14">
       <Link href="/settings?tab=runs" className="text-xs text-mute hover:text-fg">← Run history</Link>
       <h1>Run {run.id}</h1>
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-line p-5 text-sm sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-1 card text-sm sm:grid-cols-4">
         {facts.map(([k, v]) => <div key={k}><dt className="text-xs text-mute">{k}</dt><dd className="font-mono text-xs">{v}</dd></div>)}
       </dl>
       {run.error && <pre className="whitespace-pre-wrap rounded-lg border border-fg p-4 font-mono text-xs">{run.error}</pre>}
@@ -33,10 +33,10 @@ export default async function RunDetail({ params }: PageProps<"/settings/runs/[i
         <>
           <h2 className="pt-2 text-sm font-medium">Approvals ({approvals.length})</h2>
           {approvals.map((a) => (
-            <div key={a.id} className="rounded-lg border border-line p-4 text-xs">
+            <div key={a.id} className="card !p-4 text-xs">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-sm">{a.tool}</span>
-                <span className="rounded-full border border-fg px-2.5 py-0.5">{a.decision}{a.automatic ? " (auto)" : ""}</span>
+                <span className="chip border-fg">{a.decision}{a.automatic ? " (auto)" : ""}</span>
                 <span className="text-mute">
                   {a.run_id === id ? "requested in this run" : "requested earlier"}
                   {a.decided_run === id && a.run_id !== id ? " · decided in this run" : ""}
@@ -51,7 +51,7 @@ export default async function RunDetail({ params }: PageProps<"/settings/runs/[i
       <h2 className="pt-2 text-sm font-medium">Tool calls ({calls.length})</h2>
       {!calls.length && <p className="text-sm text-mute">This run used no tools.</p>}
       {calls.map((c, n) => (
-        <details key={c.id} className="rounded-lg border border-line p-4" open={!!c.error}>
+        <details key={c.id} className="card !p-4" open={!!c.error}>
           <summary className="cursor-pointer text-sm">
             <span className="mr-2 text-mute">{n + 1}.</span><span className="font-mono">{c.name}</span>
             <span className="ml-2 text-xs text-mute">{c.ms != null ? `${c.ms}ms` : ""}{c.error ? " · error" : ""}</span>

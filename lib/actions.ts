@@ -2,7 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAuth } from "./auth";
-import { db, setSetting } from "./db";
+import { db, getSetting, setSetting } from "./db";
+import { parseTheme, type Theme } from "./theme";
 import { seal } from "./secret";
 import { importGithub } from "./github";
 import { addDoc, deleteDoc, deleteFolder, embedMissing } from "./knowledge";
@@ -17,6 +18,16 @@ export async function saveSettings(f: FormData) {
   if (s(f, "api_key")) setSetting("api_key", seal(s(f, "api_key"))); // blank keeps existing
   if (s(f, "openai_key")) setSetting("openai_key", seal(s(f, "openai_key")));
   revalidatePath("/settings");
+}
+
+// merges whichever theme fields the form sends; parseTheme drops anything malformed
+export async function saveTheme(f: FormData) {
+  await requireAuth();
+  const t = parseTheme(await getSetting("theme", "{}"));
+  const next: Record<string, unknown> = { ...t };
+  for (const [k, v] of f.entries()) if (k in t && typeof v === "string") next[k] = typeof t[k as keyof Theme] === "number" ? Number(v) : v;
+  setSetting("theme", JSON.stringify(parseTheme(JSON.stringify(next))));
+  revalidatePath("/", "layout");
 }
 
 export async function clearKey() {

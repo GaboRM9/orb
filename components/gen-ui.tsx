@@ -7,7 +7,6 @@ export type ChatMessage = UIMessage<never, never, InferUITools<typeof uiTools>>;
 type AddOutput = (a: { tool: string; toolCallId: string; output: unknown }) => void;
 type Part = ChatMessage["parts"][number];
 
-const box = "rounded-lg border border-line p-5";
 const Title = ({ children }: { children?: string }) => <div className="mb-3 text-sm font-medium">{children}</div>;
 
 /** Returns a component for known UI-tool parts, or null so the caller falls back to the generic card. */
@@ -22,7 +21,7 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
       if (p.state === "output-available") return <Answered label={p.input.question} text={p.output.label} />;
       if (p.state === "input-available")
         return (
-          <div className={box}>
+          <div className="card">
             <Title>{p.input.question}</Title>
             <div className="grid gap-2 sm:grid-cols-2">
               {p.input.options.map((o) => (
@@ -41,7 +40,7 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
       if (!i?.steps) return <Skeleton label="Planning…" />;
       const mark = { todo: "○", doing: "◐", done: "●" } as const;
       return (
-        <div className={box}>
+        <div className="card">
           <Title>{i.title}</Title>
           <ol className="space-y-1.5 text-sm">
             {i.steps.map((s, n) => (
@@ -62,10 +61,10 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
           <Title>{i.title}</Title>
           <div className="grid gap-3 sm:grid-cols-2">
             {i.cards.map((c, n) => (
-              <div key={n} className={box}>
+              <div key={n} className="card">
                 <div className="flex items-start justify-between gap-2">
                   <div className="font-medium">{c?.title}</div>
-                  {c?.tag && <span className="rounded-full border border-line px-2.5 text-xs">{c.tag}</span>}
+                  {c?.tag && <span className="chip">{c.tag}</span>}
                 </div>
                 {c?.subtitle && <div className="text-xs text-mute">{c.subtitle}</div>}
                 <p className="mt-2 text-sm">{c?.body}</p>
@@ -83,7 +82,7 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
         <div className="overflow-x-auto">
           <Title>{i.title}</Title>
           <table className="w-full border-collapse text-left text-sm">
-            <thead><tr>{i.columns.map((c, n) => <th key={n} className="border-b border-fg py-1.5 pr-4 font-medium">{c}</th>)}</tr></thead>
+            <thead><tr>{i.columns.map((c, n) => <th key={n} className="border-b border-line py-1.5 pr-4 font-medium">{c}</th>)}</tr></thead>
             <tbody>
               {i.rows?.map((r, n) => (
                 <tr key={n}>{r?.map((c, k) => <td key={k} className="border-b border-line py-1.5 pr-4">{c}</td>)}</tr>
@@ -98,13 +97,13 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
       if (!i?.data) return <Skeleton label="Drawing chart…" />;
       const max = Math.max(1, ...i.data.map((d) => d?.value ?? 0));
       return (
-        <div className={box}>
+        <div className="card">
           <Title>{i.title}</Title>
           <div className="space-y-2">
             {i.data.map((d, n) => (
               <div key={n} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3 text-xs">
                 <span className="truncate text-mute">{d?.label}</span>
-                <div className="h-3 overflow-hidden rounded-full border border-line"><div className="h-full bg-fg transition-all" style={{ width: `${((d?.value ?? 0) / max) * 100}%` }} /></div>
+                <div className="h-3 overflow-hidden rounded-full border border-line"><div className="h-full bg-accent transition-all" style={{ width: `${((d?.value ?? 0) / max) * 100}%` }} /></div>
                 <span className="font-mono">{d?.value}{i.unit ?? ""}</span>
               </div>
             ))}
@@ -116,12 +115,12 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
       const i = p.input;
       if (!i?.events) return <Skeleton label="Building timeline…" />;
       return (
-        <div className={box}>
+        <div className="card">
           <Title>{i.title}</Title>
           <ol className="ml-1 border-l border-line">
             {i.events.map((e, n) => (
               <li key={n} className="relative pb-4 pl-5 last:pb-0">
-                <span className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-fg" />
+                <span className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-accent" />
                 <div className="font-mono text-xs text-mute">{e?.when}</div>
                 <div className="text-sm font-medium">{e?.title}</div>
                 {e?.detail && <div className="text-sm text-mute">{e.detail}</div>}
@@ -140,9 +139,9 @@ export function renderUiPart(p: Part, addOutput: AddOutput) {
   return null;
 }
 
-const Skeleton = ({ label }: { label: string }) => <div className="animate-pulse rounded-lg border border-line p-5 text-xs text-mute">{label}</div>;
+const Skeleton = ({ label }: { label: string }) => <div className="animate-pulse card text-xs text-mute">{label}</div>;
 const Answered = ({ label, text }: { label: string; text: string }) => (
-  <div className="rounded-full border border-line px-4 py-2 text-xs"><span className="text-mute">{label} → </span>{text}</div>
+  <div className="chip !px-4 !py-2"><span className="text-mute">{label} → </span>{text}</div>
 );
 
 type FormInput = Extract<Part, { type: "tool-askUser"; state: "input-available" }>["input"];
@@ -153,13 +152,13 @@ function Form({ input, onSubmit }: { input: FormInput; onSubmit: (v: Record<stri
   );
   const set = (k: string, x: string | number | boolean) => setV((o) => ({ ...o, [k]: x }));
   return (
-    <form className={`${box} space-y-3`} onSubmit={(e) => { e.preventDefault(); onSubmit(v); }}>
+    <form className="card space-y-3" onSubmit={(e) => { e.preventDefault(); onSubmit(v); }}>
       <Title>{input.title}</Title>
       {input.fields.map((f) => (
         <label key={f.name} className="block space-y-1 text-sm">
           {f.type === "toggle" ? (
             <span className="flex items-center gap-2">
-              <input type="checkbox" checked={!!v[f.name]} onChange={(e) => set(f.name, e.target.checked)} className="accent-current" /> {f.label}
+              <input type="checkbox" checked={!!v[f.name]} onChange={(e) => set(f.name, e.target.checked)} className="accent-accent" /> {f.label}
             </span>
           ) : (
             <>
@@ -174,7 +173,7 @@ function Form({ input, onSubmit }: { input: FormInput; onSubmit: (v: Record<stri
                   <span className="w-12 text-right font-mono text-xs">{String(v[f.name])}</span>
                 </div>
               ) : f.type === "color" ? (
-                <input type="color" className="h-9 w-16 cursor-pointer rounded-full border border-line bg-bg" value={String(v[f.name])} onChange={(e) => set(f.name, e.target.value)} />
+                <input type="color" className="h-9 w-16 cursor-pointer rounded-ctl border border-line bg-bg" value={String(v[f.name])} onChange={(e) => set(f.name, e.target.value)} />
               ) : (
                 <input className="field" required type={f.type} placeholder={f.placeholder} value={String(v[f.name])}
                   onChange={(e) => set(f.name, f.type === "number" ? Number(e.target.value) : e.target.value)} />
@@ -198,7 +197,7 @@ function MapView({ title, places }: { title: string; places: Place[] }) {
   const d = 0.03;
   const src = `https://www.openstreetmap.org/export/embed.html?bbox=${pl.lng - d},${pl.lat - d},${pl.lng + d},${pl.lat + d}&layer=mapnik&marker=${pl.lat},${pl.lng}`;
   return (
-    <div className={box}>
+    <div className="card">
       <Title>{title}</Title>
       <iframe title={pl.name} src={src} className="h-64 w-full rounded-lg border border-line grayscale dark:invert" loading="lazy" />
       <div className="mt-3 flex flex-wrap gap-2">

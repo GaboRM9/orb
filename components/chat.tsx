@@ -117,7 +117,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             <div key={m.id} className={`${m.role === "user" ? "flex justify-end" : "space-y-1"} ${m.id === last?.id ? "rise" : ""}`}>
               {/* the agent's name marks each reply once, not on every block */}
               {m.role === "assistant" && agent && <div className="text-xs text-mute">{agent.name}</div>}
-              <div className={`group space-y-2 text-[15px] leading-7 ${m.role === "user" ? "max-w-[85%] rounded-lg bg-fg px-4 py-2.5 text-bg" : ""}`}>
+              <div className={`group space-y-2 text-sm leading-7 ${m.role === "user" ? "max-w-[85%] rounded-lg bg-surface-2 px-4 py-2.5" : ""}`}>
                 {(() => {
                   const blocks: React.ReactNode[] = [];
                   let run: ToolPart[] = [];
@@ -131,7 +131,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
                       const respond = (approved: boolean) => addToolApprovalResponse({ id: p.approval.id, approved });
                       flush(i);
                       return blocks.push(
-                        <div key={i} className="space-y-3 rounded-lg border border-line p-5">
+                        <div key={i} className="space-y-3 card">
                           <div className="text-xs text-mute">Needs your approval</div>
                           <div className="text-sm">{approvalSummary(getToolName(p), p.input)}</div>
                           <div className="flex gap-2">
@@ -181,13 +181,13 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             aria-label="Agent"
             value={agent?.id}
             onChange={(e) => router.replace(`/chat/${id}?agent=${e.target.value}`)}
-            className="rounded-full border border-line bg-bg px-3 py-1 text-xs outline-none hover:shadow-[0_0_0_1px_var(--fg)]"
+            className="rounded-ctl border border-line bg-bg px-3 py-1 text-xs outline-none transition-colors hover:bg-hover"
           >
             {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         )}
         <form
-          className="composer flex items-end gap-2 rounded-[28px] border border-line bg-bg py-1.5 pl-5 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_1px_var(--fg)]"
+          className="composer flex items-end gap-2 rounded-ctl border border-line bg-surface py-1.5 pl-5 pr-1.5 shadow-sm transition-shadow focus-within:border-accent focus-within:ring-3 focus-within:ring-ring"
           onSubmit={(e) => {
             e.preventDefault();
             if (!input.trim() || busy) return;
@@ -198,7 +198,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
           <textarea
             ref={box}
             rows={1}
-            className="max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] leading-6 outline-none placeholder:text-mute"
+            className="max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm leading-6 outline-none placeholder:text-mute"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -214,9 +214,9 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             suppressHydrationWarning
           />
           {busy ? (
-            <button type="button" onClick={stop} aria-label="Stop" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fg text-bg"><StopIcon /></button>
+            <button type="button" onClick={stop} aria-label="Stop" className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl bg-accent text-on-accent"><StopIcon /></button>
           ) : (
-            <button aria-label="Send" disabled={!input.trim()} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-fg bg-fg text-bg disabled:bg-bg disabled:text-fg"><ArrowUpIcon /></button>
+            <button aria-label="Send" disabled={!input.trim()} className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl bg-accent text-on-accent transition-colors disabled:bg-surface-2 disabled:text-mute"><ArrowUpIcon /></button>
           )}
         </form>
       </div>

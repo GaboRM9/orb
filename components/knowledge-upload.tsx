@@ -29,7 +29,7 @@ export function KnowledgeUpload() {
     });
   };
   return (
-    <form ref={form} onSubmit={(e) => (e.preventDefault(), send())} className="space-y-2 rounded-lg border border-line p-5">
+    <form ref={form} onSubmit={(e) => (e.preventDefault(), send())} className="space-y-2 card">
       <div className="text-sm font-medium">Add documents</div>
       <input className="field font-mono" name="folder" placeholder="Into folder (optional), e.g. handbook" />
       <div className="grid gap-2 text-xs text-mute sm:grid-cols-2">
@@ -54,7 +54,7 @@ export function GithubImport() {
         const data = new FormData(e.currentTarget);
         start(async () => setMsg((await importGithubDocs(data)).text));
       }}
-      className="space-y-2 rounded-lg border border-line p-5">
+      className="space-y-2 card">
       <div className="text-sm font-medium">Import from GitHub</div>
       <input className="field font-mono" name="repo" placeholder="owner/repo" required />
       <input className="field font-mono" name="dir" placeholder="Folder in the repo (optional), e.g. docs" />

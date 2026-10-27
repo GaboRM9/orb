@@ -37,7 +37,7 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
-  const item = (on: boolean) => `block truncate px-3 py-2 text-[15px] ${on ? "bg-fg text-bg" : "hover:underline"}`;
+  const item = (on: boolean) => `block truncate px-3 py-2 text-sm transition-colors ${on ? "bg-surface-2" : "hover:bg-hover"}`;
   const on = (prefix: string) => path.startsWith(prefix);
   const hideWhenCollapsed = collapsed ? "md:hidden" : "";
   const rail = collapsed ? "md:mx-auto md:size-10 md:justify-center md:!p-0" : ""; // every collapsed control: one 40px circle on the same centre line
@@ -65,11 +65,11 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
               const here = path === `/chat/${t.id}`;
               return (
                 <div key={t.id} className="group relative">
-                  <Link href={`/chat/${t.id}`} onClick={close} className={`${item(here)} rounded-full !py-1.5 !pl-4 !pr-9 !text-sm`}>
+                  <Link href={`/chat/${t.id}`} onClick={close} className={`${item(here)} rounded-ctl !py-1.5 !pl-4 !pr-9 !text-sm`}>
                     {t.title || "Untitled"}
                   </Link>
-                  <form action={deleteThread.bind(null, t.id, here ? "/" : path)} className={`absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 ${here ? "text-bg" : "text-fg"}`}>
-                    <button aria-label={`Delete ${t.title || "chat"}`} className="grid h-6 w-6 place-items-center rounded-full text-current"><XIcon className="h-3.5 w-3.5" /></button>
+                  <form action={deleteThread.bind(null, t.id, here ? "/" : path)} className={`absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 text-mute hover:text-fg`}>
+                    <button aria-label={`Delete ${t.title || "chat"}`} className="grid h-6 w-6 place-items-center rounded-ctl text-current hover:bg-hover"><XIcon className="h-3.5 w-3.5" /></button>
                   </form>
                 </div>
               );
@@ -84,7 +84,7 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
               onClick={close}
               aria-label={collapsed ? label : undefined}
               title={collapsed ? label : undefined}
-              className={`${item(on(prefix))} flex items-center gap-3 rounded-full !px-3 ${rail}`}
+              className={`${item(on(prefix))} flex items-center gap-3 rounded-ctl !px-3 ${rail}`}
             >
               <Icon className="h-5 w-5" /><span className={hideWhenCollapsed}>{label}</span>
             </Link>

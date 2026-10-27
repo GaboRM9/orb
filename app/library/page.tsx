@@ -151,7 +151,7 @@ async function Connections() {
         Credentials are encrypted in data/app.db.
       </p>
       {(await listMcp()).map((m) => (
-        <div key={m.id} className="space-y-2 rounded-lg border border-line p-5">
+        <div key={m.id} className="space-y-2 card">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="text-sm font-medium">{m.name}</div>
@@ -165,7 +165,7 @@ async function Connections() {
           <McpTest id={m.id} />
         </div>
       ))}
-      <form action={saveMcp} className="space-y-2 rounded-lg border border-line p-5">
+      <form action={saveMcp} className="space-y-2 card">
         <div className="text-sm font-medium">Add MCP server</div>
         <input className="field" name="name" placeholder="Name (e.g. docs)" required />
         <input className="field font-mono" name="url" placeholder="https://example.com/mcp" required />
