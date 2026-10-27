@@ -37,7 +37,7 @@ export function ThemeToggle() {
   const dark = useSyncExternalStore(subscribe, isDark, () => false);
   const label = dark ? "Switch to light mode" : "Switch to dark mode";
   return (
-    <button onClick={flip} aria-label={label} title={label} className="btn grid h-9 w-9 place-items-center p-0 text-mute hover:text-fg">
+    <button onClick={flip} aria-label={label} title={label} className="btn grid h-9 w-9 place-items-center p-0">
       {dark ? <MoonIcon /> : <SunIcon />}
     </button>
   );
