@@ -3,10 +3,8 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, lastAssistantMessageIsCompleteWithApprovalResponses, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { renderUiPart, type ChatMessage } from "./gen-ui";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Avatar } from "./avatar";
 import { OrbIcon } from "./icons";
 
 type ChatAgent = { id: string; name: string; description: string };
@@ -29,7 +27,7 @@ function approvalSummary(name: string, input: unknown) {
   return `Use ${name}`;
 }
 
-export function Chat({ id, initialMessages, agent }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent }) {
+export function Chat({ id, initialMessages, agent, agents }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent; agents: { id: string; name: string }[] }) {
   const router = useRouter();
   const agentId = agent?.id;
   const transport = useMemo(
@@ -71,27 +69,12 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col px-6">
-      {agent && (
-        <header className="flex items-center gap-3 border-b border-line py-4">
-          <Avatar name={agent.name} size="h-9 w-9 text-sm" />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">{agent.name}</div>
-            <div className="truncate text-xs text-mute">{agent.description}</div>
-          </div>
-          {/* secondary actions live in one menu; no-JS disclosure */}
-          <details className="relative">
-            <summary aria-label="Conversation options" className="btn grid h-8 w-8 cursor-pointer list-none place-items-center p-0 text-mute hover:text-fg [&::-webkit-details-marker]:hidden">…</summary>
-            <div className="absolute right-0 z-10 mt-2 flex w-48 flex-col rounded-md border border-line glass p-1 shadow-lg text-sm">
-              <Link href={`/agents/${agent.id}?new=1`} className="rounded-sm px-3 py-2 hover:bg-fg/5">New conversation</Link>
-              <Link href={`/agents/${agent.id}/history`} className="rounded-sm px-3 py-2 hover:bg-fg/5">History</Link>
-            </div>
-          </details>
-        </header>
-      )}
       <div className="flex-1 space-y-6 overflow-y-auto py-6">
         {!messages.length && (
-          <div className="mt-24 space-y-3 text-center text-sm text-mute">
-            <p>{agent ? `Say hi to ${agent.name}.` : "Ask anything."}</p>
+          <div className="mt-24 flex flex-col items-center gap-3 text-center">
+            <OrbIcon className="h-8 w-8 text-mute" />
+            <p className="text-xl font-light tracking-tight">{agent?.name ?? "Ask anything"}</p>
+            {agent?.description && <p className="max-w-sm text-sm text-mute">{agent.description}</p>}
           </div>
         )}
         {messages.map((m) => {
@@ -160,6 +143,16 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
         <div ref={end} />
       </div>
       <div className="space-y-2 pb-8">
+        {!messages.length && agents.length > 1 && (
+          <select
+            aria-label="Agent"
+            value={agent?.id}
+            onChange={(e) => router.replace(`/chat/${id}?agent=${e.target.value}`)}
+            className="btn bg-transparent py-1 text-xs text-mute outline-none"
+          >
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
         <form
           className="flex items-end gap-2"
           onSubmit={(e) => {

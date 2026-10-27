@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { logout } from "@/app/login/actions";
 import { clearKey, clearOpenAIKey, clearThreads, deleteKnowledgeDoc, deleteKnowledgeFolder, deleteMcp, embedKnowledge, saveMcp, saveSettings, toggleMcp } from "@/lib/actions";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { GithubImport, KnowledgeUpload } from "@/components/knowledge-upload";
 import { hasEmbeddingKey, listDocs, staleChunks, type Doc } from "@/lib/knowledge";
 import { McpTest } from "@/components/mcp-test";
@@ -68,6 +69,10 @@ async function AI() {
         </div>
       </form>
       <p className="text-xs text-mute">The key is encrypted in data/app.db with AUTH_SECRET (or ADMIN_PASSWORD). Change that secret and you will need to re-enter it.</p>
+      <div className="flex items-center justify-between text-sm">
+        <span>Appearance <span className="text-mute">(follows your system by default)</span></span>
+        <ThemeToggle />
+      </div>
       <Account />
     </div>
   );
