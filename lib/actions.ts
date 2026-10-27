@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAuth } from "./auth";
 import { db, setSetting } from "./db";
+import { seal } from "./secret";
 import { probeMcp } from "./mcp";
 import type { McpServer } from "./db";
 
@@ -10,8 +11,8 @@ const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 export async function saveSettings(f: FormData) {
   await requireAuth();
-  for (const k of ["model", "system_prompt"]) setSetting(k, s(f, k));
-  if (s(f, "api_key")) setSetting("api_key", s(f, "api_key")); // blank keeps existing
+  setSetting("model", s(f, "model"));
+  if (s(f, "api_key")) setSetting("api_key", seal(s(f, "api_key"))); // blank keeps existing
   revalidatePath("/settings");
 }
 
@@ -100,7 +101,7 @@ export async function saveMcp(f: FormData) {
   if (!name || !validUrl(url)) return;
   db.prepare(
     "insert into mcp_servers (id,name,url,headers_json) values (?,?,?,?) on conflict(name) do update set url=excluded.url, headers_json=excluded.headers_json",
-  ).run(crypto.randomUUID().slice(0, 8), name, url, JSON.stringify(auth ? { Authorization: auth } : {}));
+  ).run(crypto.randomUUID().slice(0, 8), name, url, auth ? seal(JSON.stringify({ Authorization: auth })) : "{}");
   revalidatePath("/settings");
 }
 

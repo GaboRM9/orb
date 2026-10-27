@@ -1,6 +1,7 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
 import { db, type McpServer } from "./db";
+import { open } from "./secret";
 
 export const MCP_PREFIX = "mcp_";
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -8,7 +9,7 @@ const withTimeout = <T,>(p: Promise<T>, ms = 8000) =>
   Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`timed out after ${ms / 1000}s`)), ms))]);
 
 const connect = (s: McpServer) =>
-  withTimeout(createMCPClient({ transport: { type: "http", url: s.url, headers: JSON.parse(s.headers_json) } })); // redirects stay blocked (SSRF default)
+  withTimeout(createMCPClient({ transport: { type: "http", url: s.url, headers: JSON.parse(open(s.headers_json) ?? "{}") } })); // unreadable headers (secret changed) connect without auth; redirects stay blocked (SSRF default)
 
 /** Opens the given servers and merges their tools as `mcp_<server>_<tool>`. A dead server is skipped, never fatal. */
 export async function openMcp(ids: string[]) {

@@ -35,6 +35,7 @@ Each request is one **run**: model, tokens, duration, every tool call and every 
 - **Fails closed:** with no `ADMIN_PASSWORD` nobody can sign in. Sessions are HMAC-signed, 7-day tokens, compared in constant time; server actions re-check auth.
 - **Dead MCP servers don't kill a run:** connections time out after 8 s, the server is skipped and the model is told it was unreachable.
 - **Idempotent approval log:** approvals are stored once and decided once, so the same message can be synced on every turn.
+- **Secrets at rest:** the saved API key and MCP auth headers are encrypted (AES-256-GCM) with a key derived from `AUTH_SECRET` (or `ADMIN_PASSWORD`). Set `AUTH_SECRET` so changing the password doesn't lock them.
 - **Known limit:** DNS rebinding between the check and the connect isn't pinned (noted in the code).
 
 ## Generative UI tools (`lib/ui-tools.ts`, rendered in `components/gen-ui.tsx`)

@@ -13,10 +13,13 @@ const tabs = [["ai", "AI"], ["connections", "Connections"], ["runs", "Runs"]] as
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   const { tab = "ai", agent, status, view } = await searchParams;
   const one = (v: unknown) => (typeof v === "string" && v ? v : undefined);
-  const active = tabs.some(([k]) => k === tab) ? tab : "ai";
+  const active = tab === "runs" || tabs.some(([k]) => k === tab) ? tab : "ai"; // Runs is reachable by link, not a tab
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Settings</h1>
+      {active === "runs" ? (
+        <Link href="/settings" className="block text-xs text-mute hover:text-fg">← Settings · Runs</Link>
+      ) : (
       <nav className="flex gap-1 border-b border-line">
         {tabs.map(([k, label]) => (
           <Link key={k} href={`/settings?tab=${k}`}
@@ -25,6 +28,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           </Link>
         ))}
       </nav>
+      )}
       {active === "ai" && <AI />}
       {active === "connections" && <Connections />}
       {active === "runs" && <RunsPanel view={one(view)} agent={one(agent)} status={one(status)} />}
@@ -47,16 +51,12 @@ function AI() {
             {MODELS.map((m) => <option key={m}>{m}</option>)}
           </select>
         </label>
-        <label className="block space-y-1 text-sm">
-          <span>System prompt</span>
-          <textarea className="field min-h-24" name="system_prompt" defaultValue={getSetting("system_prompt", "You are a helpful, concise assistant.")} />
-        </label>
         <div className="flex gap-2">
           <button className="btn-solid">Save</button>
           {hasKey && <button className="btn" formAction={clearKey}>Remove saved key</button>}
         </div>
       </form>
-      <p className="text-xs text-mute">The key is stored in plain text in data/app.db. Local use only.</p>
+      <p className="text-xs text-mute">The key is encrypted in data/app.db with AUTH_SECRET (or ADMIN_PASSWORD). Change that secret and you will need to re-enter it.</p>
       <Account />
     </div>
   );
@@ -64,7 +64,9 @@ function AI() {
 
 function Account() {
   return (
-    <div className="flex gap-2 border-t border-line pt-6">
+    <div className="space-y-4 border-t border-line pt-6">
+      <Link href="/settings?tab=runs" className="block text-sm text-mute hover:text-fg">Run history →</Link>
+      <div className="flex flex-wrap gap-2">
       <details className="relative">
         <summary className="btn cursor-pointer list-none [&::-webkit-details-marker]:hidden">Delete all chats</summary>
         <form action={clearThreads} className="absolute left-0 z-10 mt-2 w-56 space-y-2 rounded-md border border-line bg-bg p-3 text-sm">
@@ -73,6 +75,7 @@ function Account() {
         </form>
       </details>
       <form action={logout}><button className="btn">Sign out</button></form>
+      </div>
     </div>
   );
 }
@@ -82,7 +85,7 @@ function Connections() {
     <div className="space-y-3">
       <p className="text-xs text-mute">
         Remote tool servers (Streamable HTTP). Attach them to an agent in its form. Every call to an MCP tool asks for your approval in the chat.
-        Credentials are stored in plain text in data/app.db.
+        Credentials are encrypted in data/app.db.
       </p>
       {listMcp().map((m) => (
         <div key={m.id} className="space-y-2 rounded-lg border border-line p-4">

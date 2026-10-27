@@ -8,7 +8,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 // "3 tools, 1 skill" in plain words; MCP only when the agent has servers
 function capabilities(a: Agent) {
   const mcp = JSON.parse(a.mcp_json).length;
-  return [plural(JSON.parse(a.tools_json).length, "tool"), plural(JSON.parse(a.skills_json).length, "skill"), ...(mcp ? [plural(mcp, "MCP server")] : [])].join(", ");
+  return [plural(JSON.parse(a.tools_json).length, "tool"), plural(JSON.parse(a.skills_json).length, "skill"), ...(mcp ? [plural(mcp, "connection")] : [])].join(", ");
 }
 
 export default function AgentsPage() {
