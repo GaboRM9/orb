@@ -78,7 +78,7 @@ export async function addDoc(path: string, title: string, text: string, source =
   await db.tx(async (tx) => {
     await tx.prepare(
       `insert into knowledge_docs (path,title,source,source_ref,updated) values (?,?,?,?,?)
-       on conflict(path) do update set title=excluded.title, source=excluded.source, source_ref=excluded.source_ref, updated=excluded.updated`,
+       on conflict(workspace_id, path) do update set title=excluded.title, source=excluded.source, source_ref=excluded.source_ref, updated=excluded.updated`,
     ).run(path, title, source, sourceRef, Date.now());
     const doc = ((await tx.prepare("select id from knowledge_docs where path=?").get(path)) as { id: number }).id;
     const have = new Set<string>();

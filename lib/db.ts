@@ -30,6 +30,21 @@ const api = (c: Exec) => ({
   }),
 });
 
+// Tenancy: users are global, workspaces (one per org) own every other row. Child tables (messages, tool_calls,
+// knowledge_chunks, stops) inherit their workspace from the parent row.
+// ponytail: shared tables + workspace_id; move a big or isolated tenant to its own Turso database when SQLite's single writer becomes the ceiling (ids are global, so a workspace copies out as-is).
+// These tables' unique keys include workspace_id; existing databases get them rebuilt in init().
+const scoped = {
+  skills: `(id integer primary key autoincrement, workspace_id text not null default 'default', name text not null,
+    description text not null, body text not null, enabled integer not null default 1,
+    tools_json text not null default '[]', source text not null default 'user', unique (workspace_id, name))`,
+  mcp_servers: `(id text primary key, workspace_id text not null default 'default', name text not null, url text not null,
+    headers_json text not null default '{}', enabled integer not null default 1, unique (workspace_id, name))`,
+  knowledge_docs: `(id integer primary key autoincrement, workspace_id text not null default 'default', path text not null,
+    title text not null, source text not null default 'upload', source_ref text, updated integer not null, unique (workspace_id, path))`,
+  settings: `(workspace_id text not null default 'default', key text not null, value text not null, primary key (workspace_id, key))`,
+};
+
 const g = globalThis as { __client?: Client; __ready?: Promise<Client> };
 
 // idempotent and safe to run from several cold instances at once (every statement is "if not exists" / "or ignore")
@@ -38,21 +53,26 @@ async function init() {
   const c = (g.__client ??= createClient(REMOTE ? { url: REMOTE, authToken: process.env.TURSO_AUTH_TOKEN } : { url: `file:${DB_PATH}` }));
   if (!REMOTE) await c.executeMultiple("pragma journal_mode = WAL; pragma foreign_keys = ON;");
   await c.executeMultiple(`
+    create table if not exists users (
+      id text primary key, email text unique not null collate nocase, name text not null default '',
+      pass_hash text not null, token_v integer not null default 0, created integer not null);
+    create table if not exists workspaces (id text primary key, name text not null, created integer not null);
+    create table if not exists members (
+      workspace_id text not null references workspaces(id) on delete cascade,
+      user_id text not null references users(id) on delete cascade,
+      role text not null default 'member' check (role in ('admin','member')),
+      primary key (workspace_id, user_id));
+    create index if not exists members_user on members(user_id);
+    ${Object.entries(scoped).map(([t, def]) => `create table if not exists ${t} ${def};`).join("\n")}
     create table if not exists threads (
       id text primary key, title text not null, updated integer not null);
     create table if not exists messages (
       thread_id text primary key references threads(id) on delete cascade,
       json text not null);
-    create table if not exists skills (
-      id integer primary key autoincrement, name text unique not null,
-      description text not null, body text not null, enabled integer not null default 1);
     create table if not exists agents (
       id text primary key, name text not null, description text not null default '',
       instructions text not null default '', model text not null default '',
       tools_json text not null default '[]', skills_json text not null default '[]');
-    create table if not exists mcp_servers (
-      id text primary key, name text unique not null, url text not null,
-      headers_json text not null default '{}', enabled integer not null default 1);
     create table if not exists runs (
       id text primary key, thread_id text not null, agent_id text, model text not null,
       started integer not null, ms integer not null, input_tokens integer, output_tokens integer,
@@ -65,9 +85,6 @@ async function init() {
       thread_id text not null, agent_id text, tool text not null, input text,
       decision text not null default 'pending', automatic integer not null default 0, reason text,
       requested integer not null, decided integer);
-    create table if not exists knowledge_docs (
-      id integer primary key autoincrement, path text unique not null, title text not null,
-      source text not null default 'upload', source_ref text, updated integer not null);
     create table if not exists knowledge_chunks (
       id integer primary key autoincrement, doc_id integer not null references knowledge_docs(id) on delete cascade,
       hash text not null, text text not null, vec F32_BLOB(512), embed_model text);
@@ -76,7 +93,6 @@ async function init() {
     create trigger if not exists knowledge_chunks_ad after delete on knowledge_chunks
       begin delete from knowledge_fts where rowid = old.id; end;
     create index if not exists runs_started on runs(started desc);
-    create table if not exists settings (key text primary key, value text not null);
     create table if not exists login_misses (t integer not null);
     create table if not exists stops (thread_id text primary key, at integer not null);
   `);
@@ -89,8 +105,29 @@ async function init() {
     ["runs", "cache_read_tokens", "integer"],
     ["runs", "cache_write_tokens", "integer"],
     ["runs", "cost", "real"],
+    ["threads", "workspace_id", "text not null default 'default'"],
+    ["agents", "workspace_id", "text not null default 'default'"],
+    ["runs", "workspace_id", "text not null default 'default'"],
+    ["approvals", "workspace_id", "text not null default 'default'"],
+    ["login_misses", "email", "text"],
   ])
     if (!(await cols(table)).includes(col)) await c.execute(`alter table ${table} add column ${col} ${ddl}`).catch(() => {}); // lost a race: the column exists now
+  // single-tenant databases: rebuild with workspace-scoped unique keys; every existing row lands in the first workspace.
+  // migrate() turns foreign keys off, so dropping knowledge_docs doesn't cascade into its chunks.
+  for (const [table, def] of Object.entries(scoped)) {
+    const old = await cols(table);
+    if (old.includes("workspace_id")) continue;
+    const list = old.join(",");
+    await c.migrate([`create table ${table}_ws ${def}`, `insert into ${table}_ws (${list}) select ${list} from ${table}`, `drop table ${table}`, `alter table ${table}_ws rename to ${table}`])
+      .catch(async (e) => { if (!(await cols(table)).includes("workspace_id")) throw e; }); // lost a race: another instance rebuilt it
+  }
+  await c.executeMultiple(`
+    create index if not exists threads_ws on threads(workspace_id, updated desc);
+    create index if not exists runs_ws on runs(workspace_id, started desc);
+    create index if not exists approvals_ws on approvals(workspace_id, decision);
+    create index if not exists agents_ws on agents(workspace_id);
+  `);
+  await c.execute({ sql: "insert or ignore into workspaces (id, name, created) values ('default', 'Default', ?)", args: [Date.now()] });
   // encrypt credentials saved before encryption existed
   for (const r of (await all(c, "select key, value from settings where key in ('api_key','openai_key')", [])) as { key: string; value: string }[])
     if (!isSealed(r.value)) await c.execute({ sql: "update settings set value=? where key=?", args: [seal(r.value), r.key] });
@@ -139,7 +176,7 @@ export const db = {
 export const getSetting = async (k: string, d = "") =>
   ((await db.prepare("select value from settings where key=?").get(k)) as { value: string } | undefined)?.value ?? d;
 export const setSetting = (k: string, v: string) =>
-  db.prepare("insert into settings (key,value) values (?,?) on conflict(key) do update set value=excluded.value").run(k, v);
+  db.prepare("insert into settings (key,value) values (?,?) on conflict(workspace_id, key) do update set value=excluded.value").run(k, v);
 
 export type Thread = { id: string; title: string; updated: number };
 type Skill = { id: number; name: string; description: string; body: string; enabled: number; tools_json: string; source: "user" | "agent" };

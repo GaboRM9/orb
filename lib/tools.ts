@@ -48,7 +48,7 @@ export const allTools = {
     // never overwrites an existing skill; unknown tool names are dropped
     execute: async ({ name, description, body, tools }) => {
       const known = tools.filter((t) => t in allTools && t !== "createSkill");
-      const r = await db.prepare("insert into skills (name,description,body,tools_json,source) values (?,?,?,?,'agent') on conflict(name) do nothing").run(name, description, body, JSON.stringify(known));
+      const r = await db.prepare("insert into skills (name,description,body,tools_json,source) values (?,?,?,?,'agent') on conflict(workspace_id, name) do nothing").run(name, description, body, JSON.stringify(known));
       return r.changes ? `Saved skill "${name}". The user can attach it to an agent.` : `A skill named "${name}" already exists; pick another name.`;
     },
   }),

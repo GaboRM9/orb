@@ -68,7 +68,7 @@ export async function saveSkill(f: FormData) {
   const v = [s(f, "name"), s(f, "description"), s(f, "body"), JSON.stringify(f.getAll("tools"))];
   if (v.slice(0, 3).some((x) => !x)) return;
   if (id) await db.prepare("update skills set name=?,description=?,body=?,tools_json=? where id=?").run(...v, id);
-  else await db.prepare("insert into skills (name,description,body,tools_json) values (?,?,?,?) on conflict(name) do update set description=excluded.description, body=excluded.body, tools_json=excluded.tools_json").run(...v);
+  else await db.prepare("insert into skills (name,description,body,tools_json) values (?,?,?,?) on conflict(workspace_id, name) do update set description=excluded.description, body=excluded.body, tools_json=excluded.tools_json").run(...v);
   revalidatePath("/library");
   redirect("/library?tab=skills");
 }
@@ -128,7 +128,7 @@ export async function saveMcp(f: FormData) {
   const prev = (await db.prepare("select id, url from mcp_servers where name=?").get(name)) as { id: string; url: string } | undefined;
   if (prev && prev.url !== url) await clearMcpAllowed(prev.id); // a new address is a different server: re-ask before every call
   await db.prepare(
-    "insert into mcp_servers (id,name,url,headers_json) values (?,?,?,?) on conflict(name) do update set url=excluded.url, headers_json=excluded.headers_json",
+    "insert into mcp_servers (id,name,url,headers_json) values (?,?,?,?) on conflict(workspace_id, name) do update set url=excluded.url, headers_json=excluded.headers_json",
   ).run(crypto.randomUUID().slice(0, 8), name, url, auth ? seal(JSON.stringify({ Authorization: auth })) : "{}");
   revalidatePath("/library");
 }
