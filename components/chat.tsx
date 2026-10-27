@@ -36,27 +36,20 @@ const toolLabel = (p: ToolPart) => {
 };
 const toolJson = (p: ToolPart) => JSON.stringify({ input: p.input, output: "output" in p ? p.output : undefined }, null, 2);
 
-/** Consecutive tool calls collapse into one quiet line; one call keeps its own label. */
+/** Consecutive tool calls collapse into one chip; one call keeps its own label. */
 function ToolRun({ parts }: { parts: ToolPart[] }) {
   if (parts.length === 1)
     return (
-      <details className="text-xs text-mute">
-        <summary className="cursor-pointer">{toolLabel(parts[0])}</summary>
-        <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono">{toolJson(parts[0])}</pre>
+      <details className="peek">
+        <summary>{toolLabel(parts[0])}</summary>
+        <pre>{toolJson(parts[0])}</pre>
       </details>
     );
   const working = parts.some((p) => p.state !== "output-available" && p.state !== "output-error");
   return (
-    <details className="text-xs text-mute">
-      <summary className="cursor-pointer">{working ? `Using ${parts.length} tools…` : `Used ${parts.length} tools`}</summary>
-      <div className="mt-1 space-y-2">
-        {parts.map((p, i) => (
-          <div key={i}>
-            <div>{toolLabel(p)}</div>
-            <pre className="overflow-x-auto whitespace-pre-wrap font-mono">{toolJson(p)}</pre>
-          </div>
-        ))}
-      </div>
+    <details className="peek">
+      <summary>{working ? `Using ${parts.length} tools…` : `Used ${parts.length} tools`}</summary>
+      <pre>{parts.map((p) => `${toolLabel(p)}\n${toolJson(p)}`).join("\n\n")}</pre>
     </details>
   );
 }
@@ -86,8 +79,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
   });
   const busy = status === "submitted" || status === "streaming";
   const last = messages[messages.length - 1];
-  // the orb stands in until the agent's first words arrive
-  const waiting = busy && !(last?.role === "assistant" && last.parts.some((p) => p.type === "text" && p.text));
+  const name = agent?.name ?? "orb";
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
@@ -103,21 +95,22 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col px-6">
-      <div className="flex-1 space-y-6 overflow-y-auto py-6">
+      <div className="flex-1 space-y-7 overflow-y-auto py-8">
         {!messages.length && (
           <div className="mt-24 flex flex-col items-center gap-3 text-center">
-            <OrbIcon className="h-14 w-14" />
+            <OrbIcon className="h-14 w-14 text-accent" />
             <p className="text-xl font-light tracking-tight">{agent?.name ?? "Ask anything"}</p>
             {agent?.description && <p className="max-w-sm text-sm text-mute">{agent.description}</p>}
           </div>
         )}
         {messages.map((m) => {
           const text = m.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n\n");
+          const live = busy && m.id === last?.id && m.role === "assistant";
           return (
-            <div key={m.id} className={`${m.role === "user" ? "flex justify-end" : "space-y-1"} ${m.id === last?.id ? "rise" : ""}`}>
-              {/* the agent's name marks each reply once, not on every block */}
-              {m.role === "assistant" && agent && <div className="text-xs text-mute">{agent.name}</div>}
-              <div className={`group space-y-2 text-sm leading-7 ${m.role === "user" ? "max-w-[85%] rounded-lg bg-surface-2 px-4 py-2.5" : ""}`}>
+            // no bubbles: a line in the margin says who's speaking, and pulses while the agent works
+            <div key={m.id} className={`turn ${m.role === "assistant" ? "turn-agent" : ""} ${live ? "turn-live" : ""} ${m.id === last?.id ? "rise" : ""}`}>
+              <div className="mb-1 text-xs text-mute">{m.role === "user" ? "You" : name}</div>
+              <div className="group space-y-3 text-sm leading-7">
                 {(() => {
                   const blocks: React.ReactNode[] = [];
                   let run: ToolPart[] = [];
@@ -131,25 +124,25 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
                       const respond = (approved: boolean) => addToolApprovalResponse({ id: p.approval.id, approved });
                       flush(i);
                       return blocks.push(
-                        <div key={i} className="space-y-3 card">
+                        <div key={i} className="card space-y-3 border-accent">
                           <div className="text-xs text-mute">Needs your approval</div>
                           <div className="text-sm">{approvalSummary(getToolName(p), p.input)}</div>
                           <div className="flex gap-2">
                             <button className="btn-solid" onClick={() => respond(true)}>Approve</button>
                             <button className="btn" onClick={() => respond(false)}>Deny</button>
                           </div>
-                          <details className="text-xs text-mute">
-                            <summary className="cursor-pointer">Details</summary>
-                            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono">{JSON.stringify(p.input, null, 2)}</pre>
+                          <details className="peek">
+                            <summary>Details</summary>
+                            <pre>{JSON.stringify(p.input, null, 2)}</pre>
                           </details>
                         </div>,
                       );
                     }
                     if (p.type === "reasoning")
                       return (flush(i), blocks.push(
-                        <details key={i} className="text-xs text-mute">
-                          <summary className="cursor-pointer">{p.state === "streaming" ? "Thinking…" : "Thought"}</summary>
-                          <p className="mt-1 whitespace-pre-wrap">{p.text}</p>
+                        <details key={i} className="peek">
+                          <summary>{p.state === "streaming" ? "Thinking…" : "Thought"}</summary>
+                          <pre className="!font-sans">{p.text}</pre>
                         </details>,
                       ));
                     const ui = renderUiPart(p, addToolOutput as never);
@@ -171,11 +164,18 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             </div>
           );
         })}
-        {waiting && <OrbIcon className="breathe h-6 w-6" />}
+        {/* before the reply's first part arrives, an empty turn holds its place */}
+        {busy && last?.role === "user" && (
+          <div className="turn turn-agent turn-live">
+            <div className="mb-1 text-xs text-mute">{name}</div>
+            <div className="h-7" />
+          </div>
+        )}
         {error && <p className="text-sm text-fg">{error.message}</p>}
         <div ref={end} />
       </div>
-      <div className="space-y-2 pb-6">
+      {/* the composer floats: messages fade out under it instead of stopping at a hard edge */}
+      <div className="relative space-y-2 pb-6 before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-linear-to-t before:from-bg">
         {!messages.length && agents.length > 1 && (
           <select
             aria-label="Agent"
@@ -187,7 +187,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
           </select>
         )}
         <form
-          className="composer flex items-end gap-2 rounded-ctl border border-line bg-surface py-1.5 pl-5 pr-1.5 shadow-sm transition-shadow focus-within:border-accent focus-within:ring-3 focus-within:ring-ring"
+          className="composer flex items-end gap-2 rounded-ctl border border-line bg-bg py-1.5 pl-5 pr-1.5 shadow-lg transition-shadow focus-within:border-accent focus-within:ring-3 focus-within:ring-ring"
           onSubmit={(e) => {
             e.preventDefault();
             if (!input.trim() || busy) return;
