@@ -1,17 +1,17 @@
 import Link from "next/link";
-import { listAgents, type Run } from "@/lib/db";
+import { listAgents } from "@/lib/db";
 import { listApprovals, listRuns, runSummary } from "@/lib/runs";
 
 const fmt = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
 const pill = (on: boolean) => `rounded-sm border px-2.5 py-0.5 text-xs ${on ? "border-fg bg-fg text-bg" : "border-line text-mute hover:text-fg"}`;
 const Th = ({ h }: { h: string }) => <th className="py-1.5 pr-4 font-medium">{h}</th>;
 
-export function RunsPanel({ view, agent, status }: { view?: string; agent?: string; status?: string }) {
+export async function RunsPanel({ view, agent, status }: { view?: string; agent?: string; status?: string }) {
   const approvals = view === "approvals";
   const href = (o: { view?: string; agent?: string; status?: string }) =>
     `/settings?${new URLSearchParams({ tab: "runs", ...(o.view && { view: o.view }), ...(o.agent && { agent: o.agent }), ...(o.status && { status: o.status }) })}`;
   const statuses = approvals ? ["pending", "approved", "denied"] : ["ok", "error", "aborted"];
-  const s = runSummary();
+  const s = await runSummary();
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-3 gap-px border border-line bg-line">
@@ -32,7 +32,7 @@ export function RunsPanel({ view, agent, status }: { view?: string; agent?: stri
       </p>
       <div className="flex flex-wrap gap-2">
         <Link href={href({ view, status })} className={pill(!agent)}>All agents</Link>
-        {listAgents().map((a) => <Link key={a.id} href={href({ view, agent: a.id, status })} className={pill(agent === a.id)}>{a.name}</Link>)}
+        {(await listAgents()).map((a) => <Link key={a.id} href={href({ view, agent: a.id, status })} className={pill(agent === a.id)}>{a.name}</Link>)}
         <span className="mx-1 border-l border-line" />
         {[undefined, ...statuses].map((s) => <Link key={s ?? "any"} href={href({ view, agent, status: s })} className={pill(status === s)}>{s ?? "any status"}</Link>)}
       </div>
@@ -41,8 +41,8 @@ export function RunsPanel({ view, agent, status }: { view?: string; agent?: stri
   );
 }
 
-function RunsTable({ agent, status }: { agent?: string; status?: string }) {
-  const runs = listRuns(agent, status) as Run[];
+async function RunsTable({ agent, status }: { agent?: string; status?: string }) {
+  const runs = await listRuns(agent, status);
   if (!runs.length) return <p className="text-sm text-mute">No runs yet. Chat with an agent and they will appear here.</p>;
   return (
     <div className="overflow-x-auto">
@@ -66,8 +66,8 @@ function RunsTable({ agent, status }: { agent?: string; status?: string }) {
   );
 }
 
-function ApprovalsTable({ agent, status }: { agent?: string; status?: string }) {
-  const rows = listApprovals(agent, status);
+async function ApprovalsTable({ agent, status }: { agent?: string; status?: string }) {
+  const rows = await listApprovals(agent, status);
   if (!rows.length) return <p className="text-sm text-mute">No approvals yet. They appear when an agent asks to use an MCP tool or fetchUrl.</p>;
   return (
     <div className="overflow-x-auto">

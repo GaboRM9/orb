@@ -3,7 +3,8 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:
 // Encrypts stored credentials (API key, MCP auth headers) with AES-256-GCM. The key comes from AUTH_SECRET (or ADMIN_PASSWORD),
 // so changing it makes saved secrets unreadable: open() returns null and the user re-enters them.
 const PREFIX = "enc:v1:";
-const secret = () => process.env.AUTH_SECRET || process.env.ADMIN_PASSWORD || "";
+// On Vercel the password alone is not accepted as a key: AUTH_SECRET must be set, or nobody can sign in.
+export const secret = () => process.env.AUTH_SECRET || (process.env.VERCEL ? "" : process.env.ADMIN_PASSWORD) || "";
 const key = () => scryptSync(secret(), "orbz-secrets-v1", 32);
 
 export const isSealed = (v: string) => v.startsWith(PREFIX);

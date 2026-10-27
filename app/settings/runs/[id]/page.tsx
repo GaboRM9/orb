@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 
 export default async function RunDetail({ params }: PageProps<"/settings/runs/[id]">) {
   const { id } = await params;
-  const run = db.prepare("select r.*, a.name agent from runs r left join agents a on a.id=r.agent_id where r.id=?").get(id) as Run | undefined;
+  const run = (await db.prepare("select r.*, a.name agent from runs r left join agents a on a.id=r.agent_id where r.id=?").get(id)) as Run | undefined;
   if (!run) notFound();
-  const calls = db.prepare("select * from tool_calls where run_id=? order by id").all(id) as ToolCall[];
-  const approvals = approvalsForRun(id);
-  const threadExists = !!db.prepare("select 1 from threads where id=?").get(run.thread_id);
+  const calls = (await db.prepare("select * from tool_calls where run_id=? order by id").all(id)) as ToolCall[];
+  const approvals = await approvalsForRun(id);
+  const threadExists = !!(await db.prepare("select 1 from threads where id=?").get(run.thread_id));
   const facts = [
     ["Agent", run.agent ?? "—"], ["Model", run.model], ["Started", new Date(run.started).toLocaleString()],
     ["Duration", `${run.ms}ms`], ["Tokens in", String(run.input_tokens ?? "—")], ["Tokens out", String(run.output_tokens ?? "—")], ["Status", run.status],

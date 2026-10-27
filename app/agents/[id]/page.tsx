@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function OpenAgent({ params, searchParams }: PageProps<"/agents/[id]">) {
   const { id } = await params;
   const { new: fresh } = await searchParams;
-  if (!getAgent(id)) notFound();
-  const last = db.prepare("select id from threads where agent_id=? order by updated desc limit 1").get(id) as { id: string } | undefined;
+  if (!(await getAgent(id))) notFound();
+  const last = (await db.prepare("select id from threads where agent_id=? order by updated desc limit 1").get(id)) as { id: string } | undefined;
   redirect(last && !fresh ? `/chat/${last.id}` : `/chat/${generateId()}?agent=${id}`);
 }

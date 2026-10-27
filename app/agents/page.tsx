@@ -11,16 +11,16 @@ function capabilities(a: Agent) {
   return [plural(JSON.parse(a.tools_json).length, "tool"), plural(JSON.parse(a.skills_json).length, "skill"), ...(mcp ? [plural(mcp, "connection")] : [])].join(", ");
 }
 
-export default function AgentsPage() {
+export default async function AgentsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Agents</h1>
-      {!getSetting("api_key") && !process.env.ANTHROPIC_API_KEY && (
+      {!(await getSetting("api_key")) && !process.env.ANTHROPIC_API_KEY && (
         <p className="text-sm">Add your Anthropic key in <Link href="/settings" className="underline">Settings</Link> to start chatting.</p>
       )}
       <p className="text-sm text-mute">Each agent is a persona with its own instructions, model, tools and skills. Open one to chat.</p>
       <div className="divide-y divide-line border-y border-line">
-        {listAgents().map((a) => (
+        {(await listAgents()).map((a) => (
           <div key={a.id} className="group relative flex items-center gap-4 py-5">
             <Avatar name={a.name} size="h-9 w-9 text-sm" />
             <div className="min-w-0 flex-1">

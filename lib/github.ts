@@ -21,7 +21,7 @@ export async function importGithub(repo: string, dir = "", token = "") {
       files.slice(i, i + 5).map(async (f) => {
         const r = await gh(`https://api.github.com/repos/${repo}/contents/${f.path.split("/").map(encodeURIComponent).join("/")}`, "application/vnd.github.raw+json");
         if (!r.ok) return;
-        addDoc(`github/${repo.split("/")[1]}/${f.path}`, f.path.split("/").pop()!, await r.text(), "github", `${repo}${dir && `/${dir}`}`);
+        await addDoc(`github/${repo.split("/")[1]}/${f.path}`, f.path.split("/").pop()!, await r.text(), "github", `${repo}${dir && `/${dir}`}`);
         n++;
       }),
     );

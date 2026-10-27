@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3"],
-  experimental: { serverActions: { bodySizeLimit: "20mb" } }, // knowledge uploads
+  serverExternalPackages: ["@libsql/client", "libsql"], // native bindings stay out of the bundle
+  experimental: { serverActions: { bodySizeLimit: "4mb" } }, // knowledge uploads; Vercel rejects request bodies over 4.5MB
   turbopack: {
     rules: { "*.css": { loaders: ["@tailwindcss/turbopack"], as: "*.css" } },
   },

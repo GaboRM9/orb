@@ -49,7 +49,7 @@ before(async () => {
   [store, dbm, runs, net, route, auth] = await Promise.all([
     import("../lib/chat-store"), import("../lib/db"), import("../lib/runs"), import("../lib/net-safe"), import("../app/api/chat/route"), import("../lib/auth"),
   ]);
-  dbm.db.prepare("insert into agents (id,name,instructions,tools_json,skills_json) values ('ada','Ada','You are Ada, a precise research analyst.',?,?)")
+  await dbm.db.prepare("insert into agents (id,name,instructions,tools_json,skills_json) values ('ada','Ada','You are Ada, a precise research analyst.',?,?)")
     .run(JSON.stringify(["getTime", "calculate", "fetchUrl"]), JSON.stringify(["concise-writer"]));
 });
 after(() => fake.close());
@@ -58,14 +58,14 @@ const post = (body: object, cookie = `${auth.COOKIE}=${auth.makeToken()}`) =>
   route.POST(new Request("http://x/api/chat", { method: "POST", headers: { cookie }, body: JSON.stringify(body) }));
 
 describe("mergeMessage", () => {
-  it("appends a new message", () => {
+  it("appends a new message", async () => {
     assert.equal(store.mergeMessage([user("u1", "hi")], user("u2", "yo")).length, 2);
   });
-  it("replaces a resubmitted assistant message by id", () => {
+  it("replaces a resubmitted assistant message by id", async () => {
     const out = store.mergeMessage([user("u1", "hi"), call("a1", "t1")], call("a1", "t1", { state: "output-available" }));
     assert.equal(out.length, 2);
   });
-  it("replaces by shared tool call id even when ids differ (the duplicate tool_use bug)", () => {
+  it("replaces by shared tool call id even when ids differ (the duplicate tool_use bug)", async () => {
     const out = store.mergeMessage([user("u1", "hi"), call("", "t1")], call("msg_client", "t1", { state: "output-available" }));
     assert.equal(out.length, 2);
     assert.equal(out[1].id, "msg_client");
@@ -73,14 +73,14 @@ describe("mergeMessage", () => {
 });
 
 describe("loadChat", () => {
-  it("drops stale duplicates already in the database", () => {
-    store.saveChat("dup", [user("u1", "hi"), call("", "t1"), call("a2", "t1", { state: "output-available" })]);
-    assert.equal(store.loadChat("dup").length, 2);
+  it("drops stale duplicates already in the database", async () => {
+    await store.saveChat("dup", [user("u1", "hi"), call("", "t1"), call("a2", "t1", { state: "output-available" })]);
+    assert.equal((await store.loadChat("dup")).length, 2);
   });
 });
 
 describe("fetch guard", () => {
-  it("flags private, loopback, metadata and mapped IPv6 addresses", () => {
+  it("flags private, loopback, metadata and mapped IPv6 addresses", async () => {
     for (const ip of ["127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.169.254", "::1", "fe80::1", "::ffff:7f00:1", "::ffff:10.0.0.1"])
       assert.equal(net.isPrivateAddress(ip), true, ip);
     for (const ip of ["8.8.8.8", "1.1.1.1", "172.32.0.1", "2606:4700:4700::1111", "::ffff:808:808"])
@@ -95,15 +95,15 @@ describe("fetch guard", () => {
 
 describe("approval log", () => {
   const part = (approval: object) => ({ id: "a", role: "assistant", parts: [{ type: "tool-fetchUrl", input: { url: "https://example.com" }, approval }] }) as unknown as UIMessage;
-  it("records a request once, then applies the decision once", () => {
-    runs.syncApprovals("r1", "th", "ada", part({ id: "ap1" }));
-    runs.syncApprovals("r1", "th", "ada", part({ id: "ap1" })); // same message synced twice
-    assert.equal(runs.listApprovals().filter((a) => a.approval_id === "ap1").length, 1);
-    assert.equal(runs.listApprovals(undefined, "pending").length, 1);
+  it("records a request once, then applies the decision once", async () => {
+    await runs.syncApprovals("r1", "th", "ada", part({ id: "ap1" }));
+    await runs.syncApprovals("r1", "th", "ada", part({ id: "ap1" })); // same message synced twice
+    assert.equal((await runs.listApprovals()).filter((a) => a.approval_id === "ap1").length, 1);
+    assert.equal((await runs.listApprovals(undefined, "pending")).length, 1);
 
-    runs.syncApprovals("r2", "th", "ada", part({ id: "ap1", approved: false, reason: "no" }));
-    runs.syncApprovals("r3", "th", "ada", part({ id: "ap1", approved: true })); // a later flip must not rewrite history
-    const row = runs.listApprovals().find((a) => a.approval_id === "ap1")!;
+    await runs.syncApprovals("r2", "th", "ada", part({ id: "ap1", approved: false, reason: "no" }));
+    await runs.syncApprovals("r3", "th", "ada", part({ id: "ap1", approved: true })); // a later flip must not rewrite history
+    const row = (await runs.listApprovals()).find((a) => a.approval_id === "ap1")!;
     assert.equal(row.decision, "denied");
     assert.equal(row.decided_run, "r2");
     assert.equal(row.tool, "fetchUrl");
@@ -112,13 +112,13 @@ describe("approval log", () => {
 
 describe("run summary", () => {
   const run = (id: string, started: number, status: "ok" | "error") => runs.logRun({ id, threadId: "th", model: "m", started, status, calls: [] });
-  it("counts today's runs and errors, skips older ones, and counts pending approvals", () => {
-    const base = runs.runSummary();
+  it("counts today's runs and errors, skips older ones, and counts pending approvals", async () => {
+    const base = await runs.runSummary();
     run("s1", Date.now(), "ok");
     run("s2", Date.now(), "error");
     run("s3", Date.now() - 2 * 86_400_000, "error"); // two days ago: not "today"
-    runs.syncApprovals("s1", "th", "ada", { id: "m", role: "assistant", parts: [{ type: "tool-fetchUrl", input: { url: "https://example.com" }, approval: { id: "ap-summary" } }] } as unknown as UIMessage);
-    const now = runs.runSummary();
+    await runs.syncApprovals("s1", "th", "ada", { id: "m", role: "assistant", parts: [{ type: "tool-fetchUrl", input: { url: "https://example.com" }, approval: { id: "ap-summary" } }] } as unknown as UIMessage);
+    const now = await runs.runSummary();
     assert.equal(now.runs - base.runs, 2);
     assert.equal(now.errors - base.errors, 1);
     assert.equal(now.pending - base.pending, 1);
@@ -142,9 +142,9 @@ describe("POST /api/chat", () => {
     assert.ok(sent.tools.includes("calculate") && sent.tools.includes("fetchUrl"));
     assert.ok(!sent.tools.includes("searchThreads"), "tools outside the agent's list must not be offered");
 
-    assert.equal(store.loadChat("t1").length, 2);
-    assert.equal((dbm.db.prepare("select agent_id from threads where id='t1'").get() as { agent_id: string }).agent_id, "ada");
-    const run = dbm.db.prepare("select * from runs where thread_id='t1'").get() as { status: string; input_tokens: number; output_tokens: number };
+    assert.equal((await store.loadChat("t1")).length, 2);
+    assert.equal(((await dbm.db.prepare("select agent_id from threads where id='t1'").get()) as { agent_id: string }).agent_id, "ada");
+    const run = (await dbm.db.prepare("select * from runs where thread_id='t1'").get()) as { status: string; input_tokens: number; output_tokens: number };
     assert.equal(run.status, "ok");
     assert.equal(run.input_tokens, 11);
     assert.equal(run.output_tokens, 7); // message_delta reports the cumulative output count
@@ -154,7 +154,7 @@ describe("POST /api/chat", () => {
     const res = await post({ id: "t1", message: user("u2", "again") });
     await res.text();
     assert.match(seen.at(-1)!.system, /precise research analyst/);
-    assert.equal(store.loadChat("t1").length, 4);
+    assert.equal((await store.loadChat("t1")).length, 4);
   });
 });
 
@@ -163,7 +163,7 @@ describe("auth", () => {
     assert.equal((await post({ id: "a", message: {} }, "")).status, 401);
     assert.equal((await post({ id: "a", message: {} }, `${auth.COOKIE}=${auth.makeToken()}x`)).status, 401);
   });
-  it("accepts only the right password, and fails closed when none is set", () => {
+  it("accepts only the right password, and fails closed when none is set", async () => {
     assert.ok(auth.passwordOk("test-pass"));
     assert.ok(!auth.passwordOk("nope"));
     const [exp] = auth.makeToken().split(".");
@@ -173,5 +173,15 @@ describe("auth", () => {
     delete process.env.ADMIN_PASSWORD;
     assert.ok(!auth.verifyToken(auth.makeToken()));
     process.env.ADMIN_PASSWORD = saved;
+  });
+
+  it("on Vercel, requires AUTH_SECRET instead of falling back to the password", () => {
+    process.env.VERCEL = "1";
+    assert.ok(!auth.authConfigured());
+    assert.ok(!auth.passwordOk("test-pass"));
+    process.env.AUTH_SECRET = "s3cret";
+    assert.ok(auth.authConfigured());
+    delete process.env.VERCEL;
+    delete process.env.AUTH_SECRET;
   });
 });

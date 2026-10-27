@@ -44,13 +44,13 @@ export const APPROVAL_TOOLS = new Set<string>(["fetchUrl", "createSkill"]);
 export const toolNames = Object.keys(allTools) as (keyof typeof allTools)[];
 
 /** Enabled demo tools + `loadSkill`, which lazily returns a skill's full body. */
-export function activeTools(only?: { tools: string[]; skills: string[] }) {
+export async function activeTools(only?: { tools: string[]; skills: string[] }) {
   const off = new Set<string>(only ? toolNames.filter((n) => !only.tools.includes(n)) : []);
   const tools: Record<string, Tool> = {
     ...Object.fromEntries(Object.entries(allTools).filter(([k]) => !off.has(k))),
     ...uiTools,
   };
-  const skills = listSkills().filter((s) => s.enabled && (!only || only.skills.includes(s.name)));
+  const skills = (await listSkills()).filter((s) => s.enabled && (!only || only.skills.includes(s.name)));
   for (const sk of skills) // a skill brings along the tools it needs
     for (const t of JSON.parse(sk.tools_json) as string[]) if (t in allTools) tools[t] = allTools[t as keyof typeof allTools];
   tools.createSkill = createSkill();
@@ -62,7 +62,7 @@ function loadSkill(names: string[]) {
   return tool({
     description: "Load the full instructions of a skill by name before applying it.",
     inputSchema: z.object({ name: z.enum(names as [string, ...string[]]) }),
-    execute: async ({ name }) => listSkills().find((s) => s.name === name)?.body ?? "not found",
+    execute: async ({ name }) => (await listSkills()).find((s) => s.name === name)?.body ?? "not found",
   });
 }
 
@@ -77,7 +77,7 @@ function createSkill() {
       tools: z.array(z.enum(toolNames as [string, ...string[]])).default([]),
     }),
     execute: async ({ name, description, body, tools }) => {
-      const r = db.prepare("insert into skills (name,description,body,tools_json,source) values (?,?,?,?,'agent') on conflict(name) do nothing").run(name, description, body, JSON.stringify(tools));
+      const r = await db.prepare("insert into skills (name,description,body,tools_json,source) values (?,?,?,?,'agent') on conflict(name) do nothing").run(name, description, body, JSON.stringify(tools));
       return r.changes ? `Saved skill "${name}". The user can attach it to an agent.` : `A skill named "${name}" already exists; pick another name.`;
     },
   });

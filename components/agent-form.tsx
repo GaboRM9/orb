@@ -10,11 +10,11 @@ const Section = ({ title, hint, children }: { title: string; hint?: string; chil
   </section>
 );
 
-export function AgentForm({ agent }: { agent?: Agent }) {
+export async function AgentForm({ agent }: { agent?: Agent }) {
   const tools: string[] = agent ? JSON.parse(agent.tools_json) : [];
   const skills: string[] = agent ? JSON.parse(agent.skills_json) : [];
   const mcp: string[] = agent ? JSON.parse(agent.mcp_json) : [];
-  const servers = listMcp();
+  const servers = await listMcp();
   return (
     <form action={saveAgent} className="space-y-10">
       {agent && <input type="hidden" name="id" value={agent.id} />}
@@ -49,7 +49,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
           </fieldset>
           <fieldset className="space-y-2 text-sm">
             <legend className="mb-2 text-mute">Skills</legend>
-            {listSkills().map((k) => (
+            {(await listSkills()).map((k) => (
               <label key={k.id} className="mr-4 inline-flex items-center gap-2 font-mono text-xs">
                 <input type="checkbox" name="skills" value={k.name} defaultChecked={skills.includes(k.name)} className="accent-current" /> {k.name}
               </label>
