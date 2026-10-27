@@ -136,7 +136,7 @@ function Account() {
       <div className="flex flex-wrap gap-2">
       <details className="relative">
         <summary className="btn cursor-pointer list-none [&::-webkit-details-marker]:hidden">Delete all chats</summary>
-        <form action={clearThreads} className="absolute left-0 z-10 mt-2 w-56 space-y-2 rounded-md border border-line bg-bg p-3 text-sm">
+        <form action={clearThreads} className="absolute left-0 z-10 mt-2 w-56 space-y-2 rounded-md border border-line glass p-3 shadow-lg text-sm">
           <p className="text-mute">Every conversation is deleted. Runs are kept.</p>
           <button className="btn-solid">Yes, delete all</button>
         </form>

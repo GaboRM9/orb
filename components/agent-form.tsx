@@ -67,7 +67,7 @@ export async function AgentForm({ agent }: { agent?: Agent }) {
           )}
         </div>
       </details>
-      <div className="sticky bottom-0 border-t border-line bg-bg py-4">
+      <div className="sticky bottom-0 border-t border-line glass py-4">
         <button className="btn-solid">Save</button>
       </div>
       {agent && (

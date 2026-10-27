@@ -42,15 +42,15 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
   const hideWhenCollapsed = collapsed ? "md:hidden" : "";
   return (
     <>
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4 md:hidden">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line glass px-4 md:hidden">
         <button onClick={() => setOpen(true)} aria-label="Open menu" className="btn grid h-9 w-9 place-items-center p-0 text-mute hover:text-fg">
           <MenuIcon />
         </button>
         <div className="flex items-center gap-2 font-mono text-sm font-light tracking-[0.3em]"><OrbIcon className="h-5 w-5" />orb</div>
       </header>
-      {open && <div onClick={close} className="fixed inset-0 z-30 bg-black/30 md:hidden" aria-hidden />}
+      {open && <div onClick={close} className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm md:hidden" aria-hidden />}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col justify-between overflow-hidden border-r border-line bg-bg p-5 transition-[transform,visibility] duration-200 md:static md:z-auto md:shrink-0 md:translate-x-0 md:transition-[width] ${open ? "translate-x-0" : "invisible -translate-x-full md:visible"} ${collapsed ? "md:w-16 md:p-3" : ""}`}
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col justify-between overflow-hidden border-r border-line bg-surface p-5 transition-[transform,visibility] duration-200 md:static md:z-auto md:shrink-0 md:translate-x-0 md:transition-[width] ${open ? "translate-x-0" : "invisible -translate-x-full md:visible"} ${collapsed ? "md:w-16 md:p-3" : ""}`}
       >
         <div className="flex min-h-0 flex-col">
           <div className="mb-10 flex items-center gap-2.5 px-2 font-mono text-base font-light tracking-[0.3em]">

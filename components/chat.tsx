@@ -81,7 +81,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
           {/* secondary actions live in one menu; no-JS disclosure */}
           <details className="relative">
             <summary aria-label="Conversation options" className="btn grid h-8 w-8 cursor-pointer list-none place-items-center p-0 text-mute hover:text-fg [&::-webkit-details-marker]:hidden">…</summary>
-            <div className="absolute right-0 z-10 mt-2 flex w-48 flex-col rounded-md border border-line bg-bg p-1 text-sm">
+            <div className="absolute right-0 z-10 mt-2 flex w-48 flex-col rounded-md border border-line glass p-1 shadow-lg text-sm">
               <Link href={`/agents/${agent.id}?new=1`} className="rounded-sm px-3 py-2 hover:bg-fg/5">New conversation</Link>
               <Link href={`/agents/${agent.id}/history`} className="rounded-sm px-3 py-2 hover:bg-fg/5">History</Link>
             </div>
