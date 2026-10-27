@@ -153,7 +153,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
                           <pre className="!font-sans">{p.text}</pre>
                         </details>,
                       ));
-                    const ui = renderUiPart(p, addToolOutput as never);
+                    const ui = renderUiPart(p, { addOutput: addToolOutput as never, send: (text) => sendMessage({ text }), live: !busy && m.id === last?.id });
                     if (ui) return (flush(i), blocks.push(<div key={i}>{ui}</div>));
                     if (isToolUIPart(p)) run.push(p);
                   });
