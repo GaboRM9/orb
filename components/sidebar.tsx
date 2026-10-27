@@ -2,14 +2,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { BotIcon, ChatIcon, GearIcon, MenuIcon, OrbIcon, PanelLeftIcon, ZapIcon } from "./icons";
+import { BotIcon, GearIcon, MenuIcon, OrbIcon, PanelLeftIcon, ZapIcon } from "./icons";
 import { ThemeToggle } from "./theme-toggle";
 
 type Thread = { id: string; title: string };
 
 // [label, href, icon, path prefix that keeps the tab highlighted]
-const nav = (chatHref: string) =>
-  [["Chat", chatHref, ChatIcon, "/chat"], ["Agents", "/agents", BotIcon, "/agents"], ["Skills", "/skills", ZapIcon, "/skills"], ["Settings", "/settings", GearIcon, "/settings"]] as const;
+const tabs = [["Agents", "/agents", BotIcon, "/agents"], ["Skills", "/skills", ZapIcon, "/skills"], ["Settings", "/settings", GearIcon, "/settings"]] as const;
 
 // collapsed state lives in localStorage; the server renders expanded
 const listeners = new Set<() => void>();
@@ -39,8 +38,6 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
   const item =(on: boolean) => `block truncate px-3 py-2 text-[15px] transition-colors ${on ? "text-fg" : "text-mute hover:text-fg"}`;
-  // the Chat tab opens the latest conversation; with none yet it goes to Agents, where conversations start
-  const tabs = nav(threads[0] ? `/chat/${threads[0].id}` : "/agents");
   const on = (prefix: string) => path.startsWith(prefix);
   const hideWhenCollapsed = collapsed ? "md:hidden" : "";
   return (

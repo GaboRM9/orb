@@ -52,14 +52,3 @@ Each request is one **run**: model, tokens, duration, every tool call and every 
 
 Client tools stop the model loop; the answer is sent with `addToolOutput` and
 `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls` resumes it.
-
-## Test prompts
-
-Everything:
-> Plan a 3-day trip for me. First ask me a form with: destination, budget (number), travel style (select: relaxed/adventure) and a toggle for "include flights". Then show your plan as a checklist, the day-by-day itinerary as cards, a cost breakdown as a table and a bar chart of spend per category. Finally ask me to pick one of 3 upgrade options.
-
-Just a form → cards: "Ask me a form for my favorite language, years of experience (number) and remote (toggle), then show 3 learning-path cards."
-
-Confirm flow: "I want to delete all my notes. Ask me to confirm first."
-
-Multi-step + tools + UI: "Get the time in America/Merida, calculate 17% of 2340, then show both results in a table and a chart."

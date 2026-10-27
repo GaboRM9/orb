@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAuth } from "./auth";
 import { db, setSetting } from "./db";
-import { allTools, disabledTools, toolNames } from "./tools";
 import { probeMcp } from "./mcp";
 import type { McpServer } from "./db";
 
@@ -34,28 +33,6 @@ export async function deleteThread(id: string, backTo: string) {
   db.prepare("delete from threads where id=?").run(id);
   revalidatePath("/", "layout");
   redirect(backTo);
-}
-
-export async function toggleTool(name: string) {
-  await requireAuth();
-  if (!toolNames.includes(name as never)) return;
-  const off = new Set(disabledTools());
-  if (!off.delete(name)) off.add(name); // delete returns false when it wasn't there: toggle on
-  setSetting("tools_disabled", JSON.stringify([...off]));
-  revalidatePath("/settings");
-}
-
-export async function runTool(name: string, rawInput: string) {
-  await requireAuth();
-  const t = allTools[name as keyof typeof allTools];
-  if (!t) return "unknown tool";
-  try {
-    const input = (t.inputSchema as { parse(v: unknown): unknown }).parse(JSON.parse(rawInput || "{}"));
-    const out = await (t.execute as (i: unknown, o: unknown) => Promise<unknown>)(input, {});
-    return JSON.stringify(out, null, 2);
-  } catch (e) {
-    return `error: ${e instanceof Error ? e.message : e}`;
-  }
 }
 
 export async function saveSkill(f: FormData) {

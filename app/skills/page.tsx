@@ -12,7 +12,7 @@ export default async function SkillsPage({ searchParams }: PageProps<"/skills">)
   const cur = skills.find((s) => String(s.id) === skill);
   const have: string[] = cur ? JSON.parse(cur.tools_json) : [];
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-10 py-14">
+    <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Skills</h1>
       <p className="text-sm text-mute">Reusable instructions an agent loads on demand, with the tools they need. Agents can propose new ones; you approve them.</p>
       <TileGrid>

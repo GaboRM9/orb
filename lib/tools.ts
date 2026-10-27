@@ -1,6 +1,6 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { db, getSetting, listSkills } from "./db";
+import { db, listSkills } from "./db";
 import { safeFetchText } from "./net-safe";
 import { uiTools } from "./ui-tools";
 
@@ -36,19 +36,17 @@ export const allTools = {
 export const APPROVAL_TOOLS = new Set<string>(["fetchUrl", "createSkill"]);
 
 export const toolNames = Object.keys(allTools) as (keyof typeof allTools)[];
-export const disabledTools = (): string[] => JSON.parse(getSetting("tools_disabled", "[]"));
 
 /** Enabled demo tools + `loadSkill`, which lazily returns a skill's full body. */
 export function activeTools(only?: { tools: string[]; skills: string[] }) {
-  const off = new Set(only ? toolNames.filter((n) => !only.tools.includes(n)) : disabledTools());
+  const off = new Set<string>(only ? toolNames.filter((n) => !only.tools.includes(n)) : []);
   const tools: Record<string, Tool> = {
     ...Object.fromEntries(Object.entries(allTools).filter(([k]) => !off.has(k))),
     ...uiTools,
   };
   const skills = listSkills().filter((s) => s.enabled && (!only || only.skills.includes(s.name)));
-  const disabled = new Set(disabledTools());
   for (const sk of skills) // a skill brings along the tools it needs
-    for (const t of JSON.parse(sk.tools_json) as string[]) if (t in allTools && !disabled.has(t)) tools[t] = allTools[t as keyof typeof allTools];
+    for (const t of JSON.parse(sk.tools_json) as string[]) if (t in allTools) tools[t] = allTools[t as keyof typeof allTools];
   tools.createSkill = createSkill();
   if (skills.length) tools.loadSkill = loadSkill(skills.map((s) => s.name));
   return { tools, skills };

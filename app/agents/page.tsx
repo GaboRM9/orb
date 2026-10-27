@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Avatar } from "@/components/avatar";
-import { listAgents, type Agent } from "@/lib/db";
+import { getSetting, listAgents, type Agent } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,9 @@ export default function AgentsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Agents</h1>
+      {!getSetting("api_key") && !process.env.ANTHROPIC_API_KEY && (
+        <p className="text-sm">Add your Anthropic key in <Link href="/settings" className="underline">Settings</Link> to start chatting.</p>
+      )}
       <p className="text-sm text-mute">Each agent is a persona with its own instructions, model, tools and skills. Open one to chat.</p>
       <div className="divide-y divide-line border-y border-line">
         {listAgents().map((a) => (
