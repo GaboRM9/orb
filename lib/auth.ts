@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { secret } from "./secret";
 import { redirect } from "next/navigation";
@@ -13,6 +13,18 @@ const mac = (s: string) => createHmac("sha256", secret()).update(s).digest("base
 const same = (a: string, b: string) => timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
 
 export const passwordOk = (p: string) => authConfigured() && same(p, process.env.ADMIN_PASSWORD!);
+
+// User passwords: scrypt with a per-user salt, stored as "scrypt:<salt>:<hash>".
+export function hashPassword(p: string) {
+  const salt = randomBytes(16);
+  return `scrypt:${salt.toString("base64url")}:${scryptSync(p, salt, 64).toString("base64url")}`;
+}
+export function checkPassword(p: string, stored: string) {
+  const [kind, salt, hash] = stored.split(":");
+  if (kind !== "scrypt" || !salt || !hash) return false;
+  const want = Buffer.from(hash, "base64url");
+  return timingSafeEqual(scryptSync(p, Buffer.from(salt, "base64url"), want.length), want);
+}
 
 export function makeToken() {
   const exp = String(Math.floor(Date.now() / 1000) + SESSION_SECONDS);

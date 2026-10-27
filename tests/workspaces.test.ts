@@ -82,3 +82,12 @@ it("keeps each workspace's rows to itself", async () => {
   // no workspace, no query
   await assert.rejects(d.workspaceScope.exit(() => d.listThreads()));
 });
+
+it("checks user passwords against their scrypt hash", () => {
+  const { hashPassword, checkPassword } = require("../lib/auth") as typeof import("../lib/auth");
+  const h = hashPassword("right horse");
+  assert.notEqual(h, hashPassword("right horse"), "salted");
+  assert.ok(checkPassword("right horse", h));
+  assert.ok(!checkPassword("wrong horse", h));
+  assert.ok(!checkPassword("right horse", "garbage"));
+});
