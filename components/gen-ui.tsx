@@ -7,7 +7,7 @@ export type ChatMessage = UIMessage<never, never, InferUITools<typeof uiTools>>;
 type AddOutput = (a: { tool: string; toolCallId: string; output: unknown }) => void;
 type Part = ChatMessage["parts"][number];
 
-const box = "rounded-lg bg-surface p-4";
+const box = "rounded-lg border border-line p-4";
 const Title = ({ children }: { children?: string }) => <div className="mb-3 text-sm font-medium">{children}</div>;
 
 /** Returns a component for known UI-tool parts, or null so the caller falls back to the generic card. */

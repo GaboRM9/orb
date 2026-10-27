@@ -106,7 +106,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
       <div className="flex-1 space-y-6 overflow-y-auto py-6">
         {!messages.length && (
           <div className="mt-24 flex flex-col items-center gap-3 text-center">
-            <OrbIcon className="h-8 w-8 text-mute" />
+            <OrbIcon className="h-14 w-14" />
             <p className="text-xl font-light tracking-tight">{agent?.name ?? "Ask anything"}</p>
             {agent?.description && <p className="max-w-sm text-sm text-mute">{agent.description}</p>}
           </div>
@@ -117,7 +117,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             <div key={m.id} className={`${m.role === "user" ? "flex justify-end" : "space-y-1"} ${m.id === last?.id ? "rise" : ""}`}>
               {/* the agent's name marks each reply once, not on every block */}
               {m.role === "assistant" && agent && <div className="text-xs text-mute">{agent.name}</div>}
-              <div className={`group space-y-2 text-[15px] leading-7 ${m.role === "user" ? "max-w-[85%] rounded-[22px] bg-surface px-4 py-2.5" : ""}`}>
+              <div className={`group space-y-2 text-[15px] leading-7 ${m.role === "user" ? "max-w-[85%] rounded-lg bg-fg px-4 py-2.5 text-bg" : ""}`}>
                 {(() => {
                   const blocks: React.ReactNode[] = [];
                   let run: ToolPart[] = [];
@@ -131,7 +131,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
                       const respond = (approved: boolean) => addToolApprovalResponse({ id: p.approval.id, approved });
                       flush(i);
                       return blocks.push(
-                        <div key={i} className="space-y-3 rounded-lg bg-surface p-4">
+                        <div key={i} className="space-y-3 rounded-lg border border-line p-4">
                           <div className="text-xs text-mute">Needs your approval</div>
                           <div className="text-sm">{approvalSummary(getToolName(p), p.input)}</div>
                           <div className="flex gap-2">
@@ -171,7 +171,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             </div>
           );
         })}
-        {waiting && <OrbIcon className="breathe h-6 w-6 text-mute" />}
+        {waiting && <OrbIcon className="breathe h-6 w-6" />}
         {error && <p className="text-sm text-fg">{error.message}</p>}
         <div ref={end} />
       </div>
@@ -181,13 +181,13 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
             aria-label="Agent"
             value={agent?.id}
             onChange={(e) => router.replace(`/chat/${id}?agent=${e.target.value}`)}
-            className="btn bg-transparent py-1 text-xs text-mute outline-none"
+            className="rounded-md border border-line bg-bg px-3 py-1 text-xs outline-none hover:shadow-[0_0_0_1px_var(--fg)]"
           >
             {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         )}
         <form
-          className="composer flex items-end gap-2 rounded-[26px] border border-line bg-surface py-1.5 pl-5 pr-1.5 shadow-sm transition-shadow focus-within:shadow-[0_0_0_4px_color-mix(in_srgb,var(--fg)_8%,transparent)]"
+          className="composer flex items-end gap-2 rounded-lg border border-line bg-bg py-1.5 pl-4 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_1px_var(--fg)]"
           onSubmit={(e) => {
             e.preventDefault();
             if (!input.trim() || busy) return;
@@ -216,7 +216,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
           {busy ? (
             <button type="button" onClick={stop} aria-label="Stop" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fg text-bg"><StopIcon /></button>
           ) : (
-            <button aria-label="Send" disabled={!input.trim()} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fg text-bg transition-opacity disabled:opacity-20"><ArrowUpIcon /></button>
+            <button aria-label="Send" disabled={!input.trim()} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-fg bg-fg text-bg disabled:bg-bg disabled:text-fg"><ArrowUpIcon /></button>
           )}
         </form>
       </div>
