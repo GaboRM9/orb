@@ -25,6 +25,7 @@ globalThis.fetch = (async (_url: unknown, init: { body: string }) => {
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { db } = require("../lib/db") as typeof import("../lib/db");
 const k = require("../lib/knowledge") as typeof import("../lib/knowledge");
+(require("../lib/db") as typeof import("../lib/db")).workspaceScope.enterWith("default");
 
 beforeEach(async () => {
   await db.batch([["delete from knowledge_chunks"], ["delete from knowledge_docs"]]);

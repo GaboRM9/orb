@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAuth } from "./auth";
-import { db, getSetting, listMcp, setSetting } from "./db";
+import { db, getSetting, listMcp, setSetting, ws } from "./db";
 import { parseTheme, type Theme } from "./theme";
 import { seal } from "./secret";
 import { importGithub } from "./github";
@@ -38,26 +38,28 @@ export async function saveTheme(f: FormData) {
 
 export async function clearKey() {
   await requireAuth();
-  await db.prepare("delete from settings where key='api_key'").run();
+  await db.prepare("delete from settings where key='api_key' and workspace_id=?").run(await ws());
   revalidatePath("/settings");
 }
 
 export async function clearOpenAIKey() {
   await requireAuth();
-  await db.prepare("delete from settings where key='openai_key'").run();
+  await db.prepare("delete from settings where key='openai_key' and workspace_id=?").run(await ws());
   revalidatePath("/settings");
 }
 
 export async function clearThreads() {
   await requireAuth();
-  await db.batch([["delete from messages"], ["delete from threads"]]);
+  const w = await ws();
+  await db.batch([["delete from messages where thread_id in (select id from threads where workspace_id=?)", w], ["delete from threads where workspace_id=?", w]]);
   redirect("/agents");
 }
 
 // Runs and approvals are kept on purpose: deleting a chat must not erase the audit trail.
 export async function deleteThread(id: string, backTo: string) {
   await requireAuth();
-  await db.batch([["delete from messages where thread_id=?", id], ["delete from threads where id=?", id]]);
+  const w = await ws();
+  await db.batch([["delete from messages where thread_id in (select id from threads where id=? and workspace_id=?)", id, w], ["delete from threads where id=? and workspace_id=?", id, w]]);
   revalidatePath("/", "layout");
   redirect(backTo);
 }
@@ -67,21 +69,21 @@ export async function saveSkill(f: FormData) {
   const id = Number(f.get("id")) || null;
   const v = [s(f, "name"), s(f, "description"), s(f, "body"), JSON.stringify(f.getAll("tools"))];
   if (v.slice(0, 3).some((x) => !x)) return;
-  if (id) await db.prepare("update skills set name=?,description=?,body=?,tools_json=? where id=?").run(...v, id);
-  else await db.prepare("insert into skills (name,description,body,tools_json) values (?,?,?,?) on conflict(workspace_id, name) do update set description=excluded.description, body=excluded.body, tools_json=excluded.tools_json").run(...v);
+  if (id) await db.prepare("update skills set name=?,description=?,body=?,tools_json=? where id=? and workspace_id=?").run(...v, id, await ws());
+  else await db.prepare("insert into skills (workspace_id,name,description,body,tools_json) values (?,?,?,?,?) on conflict(workspace_id, name) do update set description=excluded.description, body=excluded.body, tools_json=excluded.tools_json").run(await ws(), ...v);
   revalidatePath("/library");
   redirect("/library?tab=skills");
 }
 
 export async function toggleSkill(id: number) {
   await requireAuth();
-  await db.prepare("update skills set enabled = 1 - enabled where id=?").run(id);
+  await db.prepare("update skills set enabled = 1 - enabled where id=? and workspace_id=?").run(id, await ws());
   revalidatePath("/library");
 }
 
 export async function deleteSkill(id: number) {
   await requireAuth();
-  await db.prepare("delete from skills where id=?").run(id);
+  await db.prepare("delete from skills where id=? and workspace_id=?").run(id, await ws());
   revalidatePath("/library");
   redirect("/library?tab=skills");
 }
@@ -92,18 +94,20 @@ export async function saveAgent(f: FormData) {
   const name = s(f, "name");
   if (!name) return;
   await db.prepare(
-    `insert into agents (id,name,description,instructions,model,tools_json,skills_json,mcp_json) values (?,?,?,?,?,?,?,?)
+    `insert into agents (workspace_id,id,name,description,instructions,model,tools_json,skills_json,mcp_json) values (?,?,?,?,?,?,?,?,?)
      on conflict(id) do update set name=excluded.name, description=excluded.description, instructions=excluded.instructions,
-       model=excluded.model, tools_json=excluded.tools_json, skills_json=excluded.skills_json, mcp_json=excluded.mcp_json`,
-  ).run(id, name, s(f, "description"), s(f, "instructions"), s(f, "model"), JSON.stringify(f.getAll("tools")), JSON.stringify(f.getAll("skills")), JSON.stringify(f.getAll("mcp")));
+       model=excluded.model, tools_json=excluded.tools_json, skills_json=excluded.skills_json, mcp_json=excluded.mcp_json
+     where agents.workspace_id=excluded.workspace_id`,
+  ).run(await ws(), id, name, s(f, "description"), s(f, "instructions"), s(f, "model"), JSON.stringify(f.getAll("tools")), JSON.stringify(f.getAll("skills")), JSON.stringify(f.getAll("mcp")));
   revalidatePath("/", "layout");
   redirect("/agents");
 }
 
 export async function deleteAgent(id: string) {
   await requireAuth();
-  await db.prepare("update threads set agent_id=null where agent_id=?").run(id);
-  await db.prepare("delete from agents where id=?").run(id);
+  const w = await ws();
+  await db.prepare("update threads set agent_id=null where agent_id=? and workspace_id=?").run(id, w);
+  await db.prepare("delete from agents where id=? and workspace_id=?").run(id, w);
   revalidatePath("/", "layout");
   redirect("/agents");
 }
@@ -125,26 +129,28 @@ export async function saveMcp(f: FormData) {
   const url = s(f, "url");
   const auth = s(f, "auth");
   if (!name || !validUrl(url)) return;
-  const prev = (await db.prepare("select id, url from mcp_servers where name=?").get(name)) as { id: string; url: string } | undefined;
+  const w = await ws();
+  const prev = (await db.prepare("select id, url from mcp_servers where name=? and workspace_id=?").get(name, w)) as { id: string; url: string } | undefined;
   if (prev && prev.url !== url) await clearMcpAllowed(prev.id); // a new address is a different server: re-ask before every call
   await db.prepare(
-    "insert into mcp_servers (id,name,url,headers_json) values (?,?,?,?) on conflict(workspace_id, name) do update set url=excluded.url, headers_json=excluded.headers_json",
-  ).run(crypto.randomUUID().slice(0, 8), name, url, auth ? seal(JSON.stringify({ Authorization: auth })) : "{}");
+    "insert into mcp_servers (workspace_id,id,name,url,headers_json) values (?,?,?,?,?) on conflict(workspace_id, name) do update set url=excluded.url, headers_json=excluded.headers_json",
+  ).run(w, crypto.randomUUID().slice(0, 8), name, url, auth ? seal(JSON.stringify({ Authorization: auth })) : "{}");
   revalidatePath("/library");
 }
 
 export async function toggleMcp(id: string) {
   await requireAuth();
-  await db.prepare("update mcp_servers set enabled = 1 - enabled where id=?").run(id);
+  await db.prepare("update mcp_servers set enabled = 1 - enabled where id=? and workspace_id=?").run(id, await ws());
   revalidatePath("/library");
 }
 
 export async function deleteMcp(id: string) {
   await requireAuth();
-  await db.prepare("delete from mcp_servers where id=?").run(id);
+  const w = await ws();
+  if (!(await db.prepare("delete from mcp_servers where id=? and workspace_id=?").run(id, w)).changes) return;
   await clearMcpAllowed(id);
   // detach from agents so they don't keep a dangling id
-  for (const a of (await db.prepare("select id, mcp_json from agents").all()) as { id: string; mcp_json: string }[]) {
+  for (const a of (await db.prepare("select id, mcp_json from agents where workspace_id=?").all(w)) as { id: string; mcp_json: string }[]) {
     const keep = (JSON.parse(a.mcp_json) as string[]).filter((x) => x !== id);
     await db.prepare("update agents set mcp_json=? where id=?").run(JSON.stringify(keep), a.id);
   }
@@ -153,7 +159,7 @@ export async function deleteMcp(id: string) {
 
 export async function testMcp(id: string): Promise<{ ok: boolean; text: string }> {
   await requireAuth();
-  const srv = (await db.prepare("select * from mcp_servers where id=?").get(id)) as McpServer | undefined;
+  const srv = (await db.prepare("select * from mcp_servers where id=? and workspace_id=?").get(id, await ws())) as McpServer | undefined;
   if (!srv) return { ok: false, text: "Server not found" };
   try {
     const tools = await probeMcp(srv);
@@ -217,9 +223,10 @@ export async function importGithubDocs(f: FormData): Promise<{ ok: boolean; text
 /** Gives an agent a connection (the Connections card's "Attach to …" button). */
 export async function attachMcp(serverId: string, agentId: string) {
   await requireAuth();
-  const a = (await db.prepare("select mcp_json from agents where id=?").get(agentId)) as { mcp_json: string } | undefined;
+  const w = await ws();
+  const a = (await db.prepare("select mcp_json from agents where id=? and workspace_id=?").get(agentId, w)) as { mcp_json: string } | undefined;
   const ids = a ? (JSON.parse(a.mcp_json) as string[]) : null;
-  if (!ids || ids.includes(serverId) || !(await db.prepare("select 1 from mcp_servers where id=?").get(serverId))) return;
+  if (!ids || ids.includes(serverId) || !(await db.prepare("select 1 from mcp_servers where id=? and workspace_id=?").get(serverId, w))) return;
   await db.prepare("update agents set mcp_json=? where id=?").run(JSON.stringify([...ids, serverId]), agentId);
   revalidatePath("/", "layout");
 }

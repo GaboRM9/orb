@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { db, getSetting } from "./db";
+import { db, envKey, getSetting, ws } from "./db";
 import { open } from "./secret";
 
 // Hybrid retrieval: FTS5 (keywords, no inference) fused with an OpenAI embedding cosine scan (meaning).
@@ -29,7 +29,7 @@ export function chunk(text: string, max = 800): string[] {
   return out;
 }
 
-const apiKey = async () => open(await getSetting("openai_key")) || process.env.OPENAI_API_KEY || "";
+const apiKey = async () => open(await getSetting("openai_key")) || (await envKey("OPENAI_API_KEY")) || "";
 export const hasEmbeddingKey = async () => !!(await apiKey());
 
 /** One embedding per input, or null if there is no key or the call fails (callers fall back to keyword search). */
@@ -54,14 +54,20 @@ export async function embed(texts: string[]): Promise<Float32Array[] | null> {
 
 const vecText = (v: ArrayLike<number>) => `[${Array.from(v).join(",")}]`; // what vector32() parses
 
-let running: Promise<{ done: number; left: number }> | null = null;
-/** Embeds chunks that have no vector (or one from another model). Stops at the first failed batch; overlapping calls share one run so nothing is embedded twice. */
-export const embedMissing = () => (running ??= embedAll().finally(() => (running = null)));
+const running = new Map<string, Promise<{ done: number; left: number }>>();
+/** Embeds this workspace's chunks that have no vector (or one from another model), with this workspace's key. Stops at the first failed batch; overlapping calls share one run so nothing is embedded twice. */
+export async function embedMissing() {
+  const w = await ws();
+  if (!running.has(w)) running.set(w, embedAll(w).finally(() => running.delete(w)));
+  return running.get(w)!;
+}
 
-async function embedAll(): Promise<{ done: number; left: number }> {
+async function embedAll(w: string): Promise<{ done: number; left: number }> {
   let done = 0;
   for (;;) {
-    const rows = (await db.prepare("select id, text from knowledge_chunks where vec is null or embed_model is not ? limit ?").all(EMBED_MODEL, BATCH)) as { id: number; text: string }[];
+    const rows = (await db.prepare(
+      "select c.id, c.text from knowledge_chunks c join knowledge_docs d on d.id=c.doc_id where d.workspace_id=? and (c.vec is null or c.embed_model is not ?) limit ?",
+    ).all(w, EMBED_MODEL, BATCH)) as { id: number; text: string }[];
     const vecs = await embed(rows.map((r) => r.text));
     if (!rows.length || !vecs) break;
     await db.batch(rows.map((r, i): [string, ...unknown[]] => ["update knowledge_chunks set vec=vector32(?), embed_model=? where id=?", vecText(vecs[i]), EMBED_MODEL, r.id]));
@@ -75,12 +81,13 @@ export async function addDoc(path: string, title: string, text: string, source =
   path = normPath(path);
   if (!path) throw new Error("Empty path");
   const hashes = new Map(chunk(text).map((c) => [createHash("sha256").update(c).digest("hex"), c]));
+  const w = await ws();
   await db.tx(async (tx) => {
     await tx.prepare(
-      `insert into knowledge_docs (path,title,source,source_ref,updated) values (?,?,?,?,?)
+      `insert into knowledge_docs (workspace_id,path,title,source,source_ref,updated) values (?,?,?,?,?,?)
        on conflict(workspace_id, path) do update set title=excluded.title, source=excluded.source, source_ref=excluded.source_ref, updated=excluded.updated`,
-    ).run(path, title, source, sourceRef, Date.now());
-    const doc = ((await tx.prepare("select id from knowledge_docs where path=?").get(path)) as { id: number }).id;
+    ).run(w, path, title, source, sourceRef, Date.now());
+    const doc = ((await tx.prepare("select id from knowledge_docs where workspace_id=? and path=?").get(w, path)) as { id: number }).id;
     const have = new Set<string>();
     for (const r of (await tx.prepare("select id, hash from knowledge_chunks where doc_id=?").all(doc)) as { id: number; hash: string }[]) {
       if (hashes.has(r.hash) && !have.has(r.hash)) have.add(r.hash);
@@ -95,32 +102,40 @@ export async function addDoc(path: string, title: string, text: string, source =
 }
 
 // chunks go first so the FTS trigger runs even where foreign-key cascades are off
-export const deleteDoc = (id: number) =>
-  db.batch([["delete from knowledge_chunks where doc_id=?", id], ["delete from knowledge_docs where id=?", id]]);
-export const deleteFolder = (prefix: string) => {
-  prefix = normPath(prefix);
-  const where = "path = ? or path like ? escape '\\'";
+export const deleteDoc = async (id: number) => {
+  const w = await ws();
   return db.batch([
-    [`delete from knowledge_chunks where doc_id in (select id from knowledge_docs where ${where})`, prefix, like(prefix)],
-    [`delete from knowledge_docs where ${where}`, prefix, like(prefix)],
+    ["delete from knowledge_chunks where doc_id in (select id from knowledge_docs where id=? and workspace_id=?)", id, w],
+    ["delete from knowledge_docs where id=? and workspace_id=?", id, w],
+  ]);
+};
+export const deleteFolder = async (prefix: string) => {
+  prefix = normPath(prefix);
+  const where = "workspace_id = ? and (path = ? or path like ? escape '\\')";
+  const args = [await ws(), prefix, like(prefix)];
+  return db.batch([
+    [`delete from knowledge_chunks where doc_id in (select id from knowledge_docs where ${where})`, ...args],
+    [`delete from knowledge_docs where ${where}`, ...args],
   ]);
 };
 
 export type Doc = { id: number; path: string; title: string; source: string; source_ref: string | null; updated: number; chunks: number };
 export const listDocs = async () =>
   (await db.prepare(
-    "select d.*, (select count(*) from knowledge_chunks c where c.doc_id=d.id) chunks from knowledge_docs d order by d.path",
-  ).all()) as Doc[];
+    "select d.*, (select count(*) from knowledge_chunks c where c.doc_id=d.id) chunks from knowledge_docs d where d.workspace_id=? order by d.path",
+  ).all(await ws())) as Doc[];
 export const staleChunks = async () =>
-  ((await db.prepare("select count(*) c from knowledge_chunks where vec is null or embed_model is not ?").get(EMBED_MODEL)) as { c: number }).c;
+  ((await db.prepare(
+    "select count(*) c from knowledge_chunks c join knowledge_docs d on d.id=c.doc_id where d.workspace_id=? and (c.vec is null or c.embed_model is not ?)",
+  ).get(await ws(), EMBED_MODEL)) as { c: number }).c;
 
 export type Hit = { path: string; title: string; text: string };
 
 /** Top-k chunks by reciprocal rank fusion of keyword (bm25) and vector (cosine) rankings; keyword-only without embeddings. */
 export async function search(query: string, folder = "", k = 4): Promise<Hit[]> {
   folder = normPath(folder);
-  const scope = folder ? "and (d.path = @f or d.path like @l escape '\\')" : "";
-  const args = folder ? { f: folder, l: like(folder) } : {};
+  const scope = `and d.workspace_id = @w ${folder ? "and (d.path = @f or d.path like @l escape '\\')" : ""}`;
+  const args = { w: await ws(), ...(folder ? { f: folder, l: like(folder) } : {}) };
   const terms = query.match(/[\p{L}\p{N}_]+/gu) ?? [];
   const lists: number[][] = [];
   if (terms.length)

@@ -26,7 +26,8 @@ it("moves a single-tenant database into the first workspace without losing rows"
   old.close();
 
   /* eslint-disable @typescript-eslint/no-require-imports */
-  const { db, getSetting, setSetting } = require("../lib/db") as typeof import("../lib/db");
+  const { db, getSetting, setSetting, workspaceScope } = require("../lib/db") as typeof import("../lib/db");
+  workspaceScope.enterWith("default");
   const one = async (sql: string) => (await db.prepare(sql).get()) as Record<string, unknown>;
 
   assert.deepEqual(await one("select workspace_id, name from skills where name='mine'"), { workspace_id: "default", name: "mine" });
@@ -42,4 +43,42 @@ it("moves a single-tenant database into the first workspace without losing rows"
   await db.prepare("insert into knowledge_docs (workspace_id, path, title, updated) values ('acme', 'a.md', 'A', 1)").run();
   await db.prepare("insert into settings (workspace_id, key, value) values ('acme', 'model', 'z')").run();
   assert.equal((await one("select count(*) n from skills where name='mine'")).n, 2);
+});
+
+it("keeps each workspace's rows to itself", async () => {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const d = require("../lib/db") as typeof import("../lib/db");
+  const store = require("../lib/chat-store") as typeof import("../lib/chat-store");
+  const k = require("../lib/knowledge") as typeof import("../lib/knowledge");
+  const msg = (id: string, text: string) => [{ id, role: "user" as const, parts: [{ type: "text" as const, text }] }];
+  delete process.env.OPENAI_API_KEY; // keyword search only: no network
+  d.workspaceScope.enterWith("default");
+
+  await d.db.prepare("insert or ignore into workspaces (id, name, created) values ('acme', 'Acme', 0)").run();
+  await d.inWorkspace("acme", async () => {
+    await store.saveChat("t-acme", msg("m1", "acme secret"));
+    await d.setSetting("api_key", "acme-key");
+    await d.db.prepare("insert into agents (workspace_id, id, name) values ('acme', 'a-acme', 'Acme agent')").run();
+    await k.addDoc("plans/launch.md", "Launch", "acme launch plan");
+  });
+
+  assert.ok(!(await d.listThreads()).some((t) => t.id === "t-acme"));
+  assert.equal(await d.getAgent("a-acme"), undefined);
+  assert.deepEqual(await store.loadChat("t-acme"), []);
+  assert.notEqual(await d.getSetting("api_key"), "acme-key");
+  assert.equal((await k.search("launch")).length, 0);
+  assert.equal((await d.inWorkspace("acme", () => k.search("launch"))).length, 1);
+
+  // knowing another workspace's thread id doesn't let you write into it
+  await store.saveChat("t-acme", msg("m2", "overwrite"));
+  assert.equal((await d.inWorkspace("acme", () => store.loadChat("t-acme")))[0].id, "m1");
+
+  // the env API keys belong to the first workspace only
+  process.env.OPENAI_API_KEY = "sk-owner";
+  assert.equal(await d.envKey("OPENAI_API_KEY"), "sk-owner");
+  assert.equal(await d.inWorkspace("acme", () => d.envKey("OPENAI_API_KEY")), undefined);
+  delete process.env.OPENAI_API_KEY;
+
+  // no workspace, no query
+  await assert.rejects(d.workspaceScope.exit(() => d.listThreads()));
 });

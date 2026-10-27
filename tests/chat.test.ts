@@ -46,6 +46,8 @@ const user = (id: string, text: string): UIMessage => ({ id, role: "user", parts
 const call = (id: string, toolCallId: string, extra: object = {}): UIMessage =>
   ({ id, role: "assistant", parts: [{ type: "tool-askUser", toolCallId, state: "input-available", input: {}, ...extra }] }) as UIMessage;
 
+/* eslint-disable-next-line @typescript-eslint/no-require-imports */
+(require("../lib/db") as typeof import("../lib/db")).workspaceScope.enterWith("default"); // these tests run as the first workspace
 let store: typeof import("../lib/chat-store");
 let dbm: typeof import("../lib/db");
 let runs: typeof import("../lib/runs");

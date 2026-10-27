@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { after } from "next/server";
 import { consumeStream, convertToModelMessages, createIdGenerator, createUIMessageStreamResponse, generateId, isStepCount, streamText, toUIMessageStream, type SystemModelMessage, type UIMessage } from "ai";
 import { requestAuthed } from "@/lib/auth";
-import { getAgent, getSetting, threadAgentId } from "@/lib/db";
+import { envKey, getAgent, getSetting, threadAgentId } from "@/lib/db";
 import { fitContext, loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
 import { addUsage, DEFAULT_MODEL, type Usage } from "@/lib/models";
 import { allowedMcp, MCP_PREFIX, mcpApproval, openMcp } from "@/lib/mcp";
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   const started = Date.now();
   if (!requestAuthed(req)) return new Response("Unauthorized", { status: 401 });
   const { id, message, agentId, context }: { id: string; message: UIMessage; agentId?: string; context?: unknown } = await req.json();
-  const apiKey = open(await getSetting("api_key")) || process.env.ANTHROPIC_API_KEY;
+  const apiKey = open(await getSetting("api_key")) || (await envKey("ANTHROPIC_API_KEY"));
   if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
   const budget = Number(process.env.DAILY_BUDGET_USD) || 0;
   if (budget && (await spentToday()) >= budget)

@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { cookies } from "next/headers";
 import { createClient, type Client, type InStatement, type Transaction } from "@libsql/client";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -109,6 +111,7 @@ async function init() {
     ["agents", "workspace_id", "text not null default 'default'"],
     ["runs", "workspace_id", "text not null default 'default'"],
     ["approvals", "workspace_id", "text not null default 'default'"],
+    ["stops", "workspace_id", "text not null default 'default'"],
     ["login_misses", "email", "text"],
   ])
     if (!(await cols(table)).includes(col)) await c.execute(`alter table ${table} add column ${col} ${ddl}`).catch(() => {}); // lost a race: the column exists now
@@ -173,25 +176,43 @@ export const db = {
   },
 };
 
+export const DEFAULT_WS = "default";
+const scope = new AsyncLocalStorage<string>();
+/** Runs `fn` as workspace `id`: background jobs and tests, which have no request to read a session from. */
+export const inWorkspace = <T,>(id: string, fn: () => T) => scope.run(id, fn);
+export const workspaceScope = scope;
+
+/** The workspace every query is scoped to. Outside a request or an inWorkspace() it throws, so a query can never fall back to another org's rows. */
+export async function ws() {
+  const w = scope.getStore();
+  if (w) return w;
+  await cookies(); // throws outside a request
+  // ponytail: every signed-in request is the first workspace until the session carries one (auth phase)
+  return DEFAULT_WS;
+}
+
+/** The env API keys are the owner's: only the first workspace may fall back to them; other orgs bring their own. */
+export const envKey = async (name: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY") => ((await ws()) === DEFAULT_WS ? process.env[name] : undefined);
+
 export const getSetting = async (k: string, d = "") =>
-  ((await db.prepare("select value from settings where key=?").get(k)) as { value: string } | undefined)?.value ?? d;
-export const setSetting = (k: string, v: string) =>
-  db.prepare("insert into settings (key,value) values (?,?) on conflict(workspace_id, key) do update set value=excluded.value").run(k, v);
+  ((await db.prepare("select value from settings where workspace_id=? and key=?").get(await ws(), k)) as { value: string } | undefined)?.value ?? d;
+export const setSetting = async (k: string, v: string) =>
+  db.prepare("insert into settings (workspace_id,key,value) values (?,?,?) on conflict(workspace_id, key) do update set value=excluded.value").run(await ws(), k, v);
 
 export type Thread = { id: string; title: string; updated: number };
 type Skill = { id: number; name: string; description: string; body: string; enabled: number; tools_json: string; source: "user" | "agent" };
 export type Agent = { id: string; name: string; description: string; instructions: string; model: string; tools_json: string; skills_json: string; mcp_json: string };
 export const listThreads = async () =>
-  (await db.prepare("select id, title, updated from threads order by updated desc").all()) as Thread[];
-export const listSkills = async () => (await db.prepare("select * from skills order by name").all()) as Skill[];
-export const listAgents = async () => (await db.prepare("select * from agents order by name").all()) as Agent[];
+  (await db.prepare("select id, title, updated from threads where workspace_id=? order by updated desc").all(await ws())) as Thread[];
+export const listSkills = async () => (await db.prepare("select * from skills where workspace_id=? order by name").all(await ws())) as Skill[];
+export const listAgents = async () => (await db.prepare("select * from agents where workspace_id=? order by name").all(await ws())) as Agent[];
 export const getAgent = async (id: string | null | undefined) =>
-  id ? ((await db.prepare("select * from agents where id=?").get(id)) as Agent | undefined) : undefined;
+  id ? ((await db.prepare("select * from agents where id=? and workspace_id=?").get(id, await ws())) as Agent | undefined) : undefined;
 export const threadAgentId = async (threadId: string) =>
-  ((await db.prepare("select agent_id from threads where id=?").get(threadId)) as { agent_id: string | null } | undefined)?.agent_id ?? null;
+  ((await db.prepare("select agent_id from threads where id=? and workspace_id=?").get(threadId, await ws())) as { agent_id: string | null } | undefined)?.agent_id ?? null;
 
 export type McpServer = { id: string; name: string; url: string; headers_json: string; enabled: number };
-export const listMcp = async () => (await db.prepare("select * from mcp_servers order by name").all()) as McpServer[];
+export const listMcp = async () => (await db.prepare("select * from mcp_servers where workspace_id=? order by name").all(await ws())) as McpServer[];
 export type Run = {
   id: string; thread_id: string; agent_id: string | null; model: string; started: number; ms: number;
   input_tokens: number | null; output_tokens: number | null; cache_read_tokens: number | null; cache_write_tokens: number | null;

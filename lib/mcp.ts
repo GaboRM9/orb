@@ -1,6 +1,6 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
-import { db, getSetting, setSetting, type McpServer } from "./db";
+import { db, getSetting, setSetting, ws, type McpServer } from "./db";
 import { open } from "./secret";
 
 export const MCP_PREFIX = "mcp_";
@@ -41,7 +41,7 @@ export async function openMcp(ids: string[]) {
   const owners: Record<string, string> = {}; // tool name → server id, for always-allow
   const warnings: string[] = [];
   const servers = ids.length
-    ? ((await db.prepare(`select * from mcp_servers where enabled=1 and id in (${ids.map(() => "?").join(",")})`).all(...ids)) as McpServer[])
+    ? ((await db.prepare(`select * from mcp_servers where enabled=1 and workspace_id=? and id in (${ids.map(() => "?").join(",")})`).all(await ws(), ...ids)) as McpServer[])
     : [];
   await Promise.all(
     servers.map(async (s) => {
