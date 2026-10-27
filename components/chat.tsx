@@ -54,7 +54,7 @@ function ToolRun({ parts }: { parts: ToolPart[] }) {
   );
 }
 
-export function Chat({ id, initialMessages, agent, agents }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent; agents: { id: string; name: string }[] }) {
+export function Chat({ id, initialMessages, agent }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent }) {
   const router = useRouter();
   const agentId = agent?.id;
   const transport = useMemo(
@@ -175,17 +175,7 @@ export function Chat({ id, initialMessages, agent, agents }: { id: string; initi
         <div ref={end} />
       </div>
       {/* the composer floats: messages fade out under it instead of stopping at a hard edge */}
-      <div className="relative space-y-2 pb-6 before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-linear-to-t before:from-bg">
-        {!messages.length && agents.length > 1 && (
-          <select
-            aria-label="Agent"
-            value={agent?.id}
-            onChange={(e) => router.replace(`/chat/${id}?agent=${e.target.value}`)}
-            className="rounded-ctl border border-line bg-bg px-3 py-1 text-xs outline-none transition-colors hover:bg-hover"
-          >
-            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        )}
+      <div className="relative pb-6 before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-linear-to-t before:from-bg">
         <form
           className="composer flex items-end gap-2 rounded-ctl border border-line bg-bg py-1.5 pl-5 pr-1.5 shadow-lg transition-shadow focus-within:border-accent focus-within:ring-3 focus-within:ring-ring"
           onSubmit={(e) => {
