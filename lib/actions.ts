@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { requireAuth } from "./auth";
 import { db, setSetting } from "./db";
 import { seal } from "./secret";
+import { importGithub } from "./github";
+import { addDoc, deleteDoc, deleteFolder, embedMissing } from "./knowledge";
 import { probeMcp } from "./mcp";
 import type { McpServer } from "./db";
 
@@ -13,12 +15,19 @@ export async function saveSettings(f: FormData) {
   await requireAuth();
   setSetting("model", s(f, "model"));
   if (s(f, "api_key")) setSetting("api_key", seal(s(f, "api_key"))); // blank keeps existing
+  if (s(f, "openai_key")) setSetting("openai_key", seal(s(f, "openai_key")));
   revalidatePath("/settings");
 }
 
 export async function clearKey() {
   await requireAuth();
   db.prepare("delete from settings where key='api_key'").run();
+  revalidatePath("/settings");
+}
+
+export async function clearOpenAIKey() {
+  await requireAuth();
+  db.prepare("delete from settings where key='openai_key'").run();
   revalidatePath("/settings");
 }
 
@@ -129,6 +138,57 @@ export async function testMcp(id: string): Promise<{ ok: boolean; text: string }
   try {
     const tools = await probeMcp(srv);
     return { ok: true, text: tools.length ? tools.map((t) => `${t.name}${t.description ? ` — ${t.description.slice(0, 80)}` : ""}`).join("\n") : "Connected, but the server lists no tools." };
+  } catch (e) {
+    return { ok: false, text: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ---- Knowledge
+const MAX_FILE = 2_000_000; // chars read per file; bigger files are skipped, not truncated silently
+const TEXT = /\.(md|mdx|txt|rst|csv|json|ya?ml|html?)$/i;
+
+/** `files` and `paths` are parallel: FormData drops a folder pick's relative paths, so the client sends them alongside. */
+export async function uploadKnowledge(f: FormData): Promise<{ ok: boolean; text: string }> {
+  await requireAuth();
+  const base = s(f, "folder");
+  const paths = f.getAll("paths").map(String);
+  let added = 0;
+  const files = f.getAll("files");
+  for (const [i, file] of files.entries()) {
+    if (!(file instanceof File) || !TEXT.test(file.name) || file.size > MAX_FILE) continue;
+    addDoc(`${base}/${paths[i] || file.name}`, file.name, await file.text());
+    added++;
+  }
+  const { left } = await embedMissing(); // one pass for the whole upload
+  revalidatePath("/settings");
+  const skipped = files.length - added;
+  return { ok: added > 0, text: `Added ${added}${skipped ? `, skipped ${skipped} (unsupported or over 2MB)` : ""}${left ? `. ${left} chunks are keyword-only until embedded` : ""}` };
+}
+
+export async function deleteKnowledgeDoc(id: number) {
+  await requireAuth();
+  deleteDoc(id);
+  revalidatePath("/settings");
+}
+
+export async function deleteKnowledgeFolder(path: string) {
+  await requireAuth();
+  deleteFolder(path);
+  revalidatePath("/settings");
+}
+
+export async function embedKnowledge() {
+  await requireAuth();
+  await embedMissing();
+  revalidatePath("/settings");
+}
+
+export async function importGithubDocs(f: FormData): Promise<{ ok: boolean; text: string }> {
+  await requireAuth();
+  try {
+    const { n, truncated } = await importGithub(s(f, "repo"), s(f, "dir"), s(f, "token"));
+    revalidatePath("/settings");
+    return { ok: true, text: `Imported ${n} files${truncated ? " (repo too large: only the first 200 docs were taken, narrow with a folder)" : ""}` };
   } catch (e) {
     return { ok: false, text: e instanceof Error ? e.message : String(e) };
   }
