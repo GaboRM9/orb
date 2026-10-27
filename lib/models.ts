@@ -12,6 +12,17 @@ const PRICES: Record<string, { in: number; out: number; read: number }> = {
 
 export type Usage = { inputTokens?: number; outputTokens?: number; inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number } };
 
+/** Running total over a run's steps, so a stopped or failed run still accounts for the steps it finished. */
+export function addUsage(a: Usage, b: Usage): Usage {
+  const n = (x?: number, y?: number) => (x ?? 0) + (y ?? 0);
+  const d = (k: "noCacheTokens" | "cacheReadTokens" | "cacheWriteTokens") => n(a.inputTokenDetails?.[k], b.inputTokenDetails?.[k]);
+  return {
+    inputTokens: n(a.inputTokens, b.inputTokens),
+    outputTokens: n(a.outputTokens, b.outputTokens),
+    inputTokenDetails: { noCacheTokens: d("noCacheTokens"), cacheReadTokens: d("cacheReadTokens"), cacheWriteTokens: d("cacheWriteTokens") },
+  };
+}
+
 /** Dollar cost of one run; null for a model without a known price. `inputTokens` counts cached tokens too, so split it by the details. */
 export function runCost(model: string, u: Usage) {
   const p = PRICES[model];

@@ -28,7 +28,14 @@ const fake = http.createServer((req, res) => {
       ev("content_block_stop", { index: 0 }) +
       ev("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 7 } }) +
       ev("message_stop", {});
-    const delay = body.includes("sleepy") ? 3000 : body.includes("slowpoke") ? 150 : 0;
+    if (body.includes("twostep") && !body.includes("tool_result")) // first step: call a tool that needs no approval
+      return res.end(start +
+        ev("content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_1", name: "getTime", input: {} } }) +
+        ev("content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{}" } }) +
+        ev("content_block_stop", { index: 0 }) +
+        ev("message_delta", { delta: { stop_reason: "tool_use", stop_sequence: null }, usage: { output_tokens: 7 } }) +
+        ev("message_stop", {}));
+    const delay = body.includes("sleepy") || body.includes("twostep") ? 3000 : body.includes("slowpoke") ? 150 : 0;
     if (!delay) return res.end(start + rest);
     res.write(start); // a slow model: the client can hang up, or press Stop, mid-answer
     setTimeout(() => res.end(rest), delay).unref();
@@ -192,6 +199,18 @@ describe("POST /api/chat", () => {
     const reply = async () => JSON.stringify((await store.loadChat("gone"))[1]?.parts ?? []);
     for (let i = 0; i < 50 && !(await reply()).includes("pong"); i++) await new Promise((r) => setTimeout(r, 20));
     assert.match(await reply(), /pong/);
+  });
+
+  it("a stopped run still records the tokens and cost of the steps it finished", async () => {
+    const res = await post({ id: "halt2", message: user("u1", "twostep") }); // step 1 calls getTime, step 2 stalls
+    await new Promise((r) => setTimeout(r, 300));
+    await route.DELETE(new Request("http://x/api/chat?id=halt2", { method: "DELETE", headers: { cookie: `${auth.COOKIE}=${auth.makeToken()}` } }));
+    await res.text();
+    for (let i = 0; i < 50 && !(await dbm.db.prepare("select 1 from runs where thread_id='halt2'").get()); i++) await new Promise((r) => setTimeout(r, 20));
+    const run = (await dbm.db.prepare("select status, cost, input_tokens from runs where thread_id='halt2'").get()) as { status: string; cost: number | null; input_tokens: number | null };
+    assert.equal(run.status, "aborted");
+    assert.equal(run.input_tokens, 11, "step 1's usage counts toward the budget");
+    assert.ok(run.cost! > 0);
   });
 
   it("Stop aborts the run on the server and keeps the thread", async () => {

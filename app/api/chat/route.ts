@@ -4,7 +4,7 @@ import { consumeStream, convertToModelMessages, createIdGenerator, createUIMessa
 import { requestAuthed } from "@/lib/auth";
 import { getAgent, getSetting, threadAgentId } from "@/lib/db";
 import { fitContext, loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
-import { DEFAULT_MODEL, type Usage } from "@/lib/models";
+import { addUsage, DEFAULT_MODEL, type Usage } from "@/lib/models";
 import { MCP_PREFIX, openMcp } from "@/lib/mcp";
 import { open } from "@/lib/secret";
 import { logRun, requestStop, spentToday, stopRequested, syncApprovals, type LoggedCall } from "@/lib/runs";
@@ -60,7 +60,9 @@ export async function POST(req: Request) {
   const calls: LoggedCall[] = [];
   const stopper = new AbortController();
   const poll = setInterval(() => void stopRequested(id, started).then((s) => s && stopper.abort(), () => {}), STOP_POLL_MS);
-  const finish = async (status: "ok" | "error" | "aborted", usage?: Usage, error?: unknown) => {
+  // ponytail: tokens of a step cut off mid-stream are billed but unseen here; only finished steps are counted
+  let usage: Usage | undefined;
+  const finish = async (status: "ok" | "error" | "aborted", error?: unknown) => {
     clearInterval(poll);
     await mcp.close();
     await logRun({
@@ -86,8 +88,9 @@ export async function POST(req: Request) {
         ...(toolOutput.type === "tool-result" ? { output: toolOutput.output } : { error: String(toolOutput.error) }),
       });
     },
-    onEnd: ({ totalUsage }) => track(finish("ok", totalUsage)),
-    onError: ({ error }) => void track(finish("error", undefined, error)),
+    onStepEnd: (step) => void (usage = addUsage(usage ?? {}, step.usage)),
+    onEnd: () => track(finish("ok")),
+    onError: ({ error }) => void track(finish("error", error)),
     onAbort: () => void track(finish("aborted")),
   });
 
