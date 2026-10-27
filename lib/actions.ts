@@ -14,9 +14,9 @@ const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 export async function saveSettings(f: FormData) {
   await requireAuth();
-  setSetting("model", s(f, "model"));
-  if (s(f, "api_key")) setSetting("api_key", seal(s(f, "api_key"))); // blank keeps existing
-  if (s(f, "openai_key")) setSetting("openai_key", seal(s(f, "openai_key")));
+  await setSetting("model", s(f, "model"));
+  if (s(f, "api_key")) await setSetting("api_key", seal(s(f, "api_key"))); // blank keeps existing
+  if (s(f, "openai_key")) await setSetting("openai_key", seal(s(f, "openai_key")));
   revalidatePath("/settings");
 }
 
@@ -26,7 +26,7 @@ export async function saveTheme(f: FormData) {
   const t = parseTheme(await getSetting("theme", "{}"));
   const next: Record<string, unknown> = { ...t };
   for (const [k, v] of f.entries()) if (k in t && typeof v === "string") next[k] = typeof t[k as keyof Theme] === "number" ? Number(v) : v;
-  setSetting("theme", JSON.stringify(parseTheme(JSON.stringify(next))));
+  await setSetting("theme", JSON.stringify(parseTheme(JSON.stringify(next))));
   revalidatePath("/", "layout");
 }
 

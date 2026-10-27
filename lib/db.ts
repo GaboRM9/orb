@@ -77,6 +77,8 @@ async function init() {
       begin delete from knowledge_fts where rowid = old.id; end;
     create index if not exists runs_started on runs(started desc);
     create table if not exists settings (key text primary key, value text not null);
+    create table if not exists login_misses (t integer not null);
+    create table if not exists stops (thread_id text primary key, at integer not null);
   `);
   const cols = async (table: string) => ((await all(c, `pragma table_info(${table})`, [])) as { name: string }[]).map((x) => x.name);
   for (const [table, col, ddl] of [
@@ -84,6 +86,9 @@ async function init() {
     ["skills", "tools_json", "text not null default '[]'"],
     ["skills", "source", "text not null default 'user'"],
     ["threads", "agent_id", "text"],
+    ["runs", "cache_read_tokens", "integer"],
+    ["runs", "cache_write_tokens", "integer"],
+    ["runs", "cost", "real"],
   ])
     if (!(await cols(table)).includes(col)) await c.execute(`alter table ${table} add column ${col} ${ddl}`).catch(() => {}); // lost a race: the column exists now
   // encrypt credentials saved before encryption existed
@@ -152,7 +157,8 @@ export type McpServer = { id: string; name: string; url: string; headers_json: s
 export const listMcp = async () => (await db.prepare("select * from mcp_servers order by name").all()) as McpServer[];
 export type Run = {
   id: string; thread_id: string; agent_id: string | null; model: string; started: number; ms: number;
-  input_tokens: number | null; output_tokens: number | null; status: string; error: string | null;
+  input_tokens: number | null; output_tokens: number | null; cache_read_tokens: number | null; cache_write_tokens: number | null;
+  cost: number | null; status: string; error: string | null;
   agent?: string | null; calls?: number;
 };
 export type ToolCall = { id: number; run_id: string; name: string; input: string | null; output: string | null; ms: number | null; error: string | null };

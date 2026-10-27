@@ -212,7 +212,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
             suppressHydrationWarning
           />
           {busy ? (
-            <button type="button" onClick={stop} aria-label="Stop" className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl bg-accent text-on-accent"><StopIcon /></button>
+            <button type="button" onClick={() => { stop(); void fetch(`/api/chat?id=${encodeURIComponent(id)}`, { method: "DELETE" }); }} aria-label="Stop" className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl bg-accent text-on-accent"><StopIcon /></button>
           ) : (
             <button aria-label="Send" disabled={!input.trim()} className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl bg-accent text-on-accent transition-colors disabled:bg-surface-2 disabled:text-mute"><ArrowUpIcon /></button>
           )}
