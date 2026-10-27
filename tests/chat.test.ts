@@ -12,23 +12,25 @@ process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "showcase-")), "test.db");
 delete process.env.ANTHROPIC_API_KEY;
 process.env.ADMIN_PASSWORD = "test-pass";
 
-const seen: { system: string; tools: string[] }[] = [];
+const seen: { system: string; tools: string[]; messages: string }[] = [];
 const fake = http.createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {
     const b = JSON.parse(body);
-    seen.push({ system: JSON.stringify(b.system ?? ""), tools: (b.tools ?? []).map((t: { name: string }) => t.name) });
+    seen.push({ system: JSON.stringify(b.system ?? ""), tools: (b.tools ?? []).map((t: { name: string }) => t.name), messages: JSON.stringify(b.messages) });
     const ev = (e: string, d: object) => `event: ${e}\ndata: ${JSON.stringify({ type: e, ...d })}\n\n`;
     res.writeHead(200, { "content-type": "text/event-stream" });
-    res.end(
-      ev("message_start", { message: { id: "msg_1", type: "message", role: "assistant", model: b.model, content: [], stop_reason: null, usage: { input_tokens: 11, output_tokens: 1 } } }) +
-        ev("content_block_start", { index: 0, content_block: { type: "text", text: "" } }) +
-        ev("content_block_delta", { index: 0, delta: { type: "text_delta", text: "pong" } }) +
-        ev("content_block_stop", { index: 0 }) +
-        ev("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 7 } }) +
-        ev("message_stop", {}),
-    );
+    const start = ev("message_start", { message: { id: "msg_1", type: "message", role: "assistant", model: b.model, content: [], stop_reason: null, usage: { input_tokens: 11, output_tokens: 1 } } });
+    const rest =
+      ev("content_block_start", { index: 0, content_block: { type: "text", text: "" } }) +
+      ev("content_block_delta", { index: 0, delta: { type: "text_delta", text: "pong" } }) +
+      ev("content_block_stop", { index: 0 }) +
+      ev("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 7 } }) +
+      ev("message_stop", {});
+    if (!body.includes("slowpoke")) return res.end(start + rest);
+    res.write(start); // a slow model: the client can hang up mid-answer
+    setTimeout(() => res.end(rest), 150);
   });
 });
 
@@ -69,6 +71,21 @@ describe("mergeMessage", () => {
     const out = store.mergeMessage([user("u1", "hi"), call("", "t1")], call("msg_client", "t1", { state: "output-available" }));
     assert.equal(out.length, 2);
     assert.equal(out[1].id, "msg_client");
+  });
+});
+
+describe("fitContext", () => {
+  const m = (role: "user" | "assistant", text: string) => ({ role, content: [{ type: "text" as const, text }] });
+  it("sends a conversation under budget untouched (same array, so the cached prefix holds)", () => {
+    const msgs = [m("user", "hi"), m("assistant", "yo")];
+    assert.equal(store.fitContext(msgs, 1000), msgs);
+  });
+  it("drops the oldest turns over budget, cutting at a user message and keeping the latest", () => {
+    const msgs = [m("user", "x".repeat(500)), m("assistant", "y".repeat(500)), m("user", "recent"), m("assistant", "ok"), m("user", "now")];
+    const out = store.fitContext(msgs, 400);
+    assert.equal(out[0].role, "user");
+    assert.deepEqual(out.at(-1), msgs.at(-1));
+    assert.ok(JSON.stringify(out).length <= 400);
   });
 });
 
@@ -148,6 +165,20 @@ describe("POST /api/chat", () => {
     assert.equal(run.status, "ok");
     assert.equal(run.input_tokens, 11);
     assert.equal(run.output_tokens, 7); // message_delta reports the cumulative output count
+  });
+
+  it("marks the system prompt and the latest message as cache breakpoints", () => {
+    assert.match(seen.at(-1)!.system, /cache_control/);
+    const msgs = JSON.parse(seen.at(-1)!.messages) as { content: { cache_control?: unknown }[] }[];
+    assert.ok(msgs.at(-1)!.content.at(-1)!.cache_control);
+  });
+
+  it("finishes and saves the turn even when the client disconnects", async () => {
+    const res = await post({ id: "gone", message: user("u1", "slowpoke") });
+    await res.body!.cancel(); // tab closed mid-answer
+    const reply = async () => JSON.stringify((await store.loadChat("gone"))[1]?.parts ?? []);
+    for (let i = 0; i < 50 && !(await reply()).includes("pong"); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.match(await reply(), /pong/);
   });
 
   it("keeps the thread's agent on later turns even if the client omits it", async () => {

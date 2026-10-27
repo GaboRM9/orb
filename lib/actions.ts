@@ -13,9 +13,9 @@ const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 export async function saveSettings(f: FormData) {
   await requireAuth();
-  setSetting("model", s(f, "model"));
-  if (s(f, "api_key")) setSetting("api_key", seal(s(f, "api_key"))); // blank keeps existing
-  if (s(f, "openai_key")) setSetting("openai_key", seal(s(f, "openai_key")));
+  await setSetting("model", s(f, "model"));
+  if (s(f, "api_key")) await setSetting("api_key", seal(s(f, "api_key"))); // blank keeps existing
+  if (s(f, "openai_key")) await setSetting("openai_key", seal(s(f, "openai_key")));
   revalidatePath("/settings");
 }
 

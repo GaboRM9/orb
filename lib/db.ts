@@ -77,6 +77,7 @@ async function init() {
       begin delete from knowledge_fts where rowid = old.id; end;
     create index if not exists runs_started on runs(started desc);
     create table if not exists settings (key text primary key, value text not null);
+    create table if not exists login_misses (t integer not null);
   `);
   const cols = async (table: string) => ((await all(c, `pragma table_info(${table})`, [])) as { name: string }[]).map((x) => x.name);
   for (const [table, col, ddl] of [
