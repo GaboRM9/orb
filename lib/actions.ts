@@ -52,21 +52,21 @@ export async function saveSkill(f: FormData) {
   if (v.slice(0, 3).some((x) => !x)) return;
   if (id) await db.prepare("update skills set name=?,description=?,body=?,tools_json=? where id=?").run(...v, id);
   else await db.prepare("insert into skills (name,description,body,tools_json) values (?,?,?,?) on conflict(name) do update set description=excluded.description, body=excluded.body, tools_json=excluded.tools_json").run(...v);
-  revalidatePath("/skills");
-  redirect("/skills");
+  revalidatePath("/library");
+  redirect("/library?tab=skills");
 }
 
 export async function toggleSkill(id: number) {
   await requireAuth();
   await db.prepare("update skills set enabled = 1 - enabled where id=?").run(id);
-  revalidatePath("/skills");
+  revalidatePath("/library");
 }
 
 export async function deleteSkill(id: number) {
   await requireAuth();
   await db.prepare("delete from skills where id=?").run(id);
-  revalidatePath("/skills");
-  redirect("/skills");
+  revalidatePath("/library");
+  redirect("/library?tab=skills");
 }
 
 export async function saveAgent(f: FormData) {
@@ -111,13 +111,13 @@ export async function saveMcp(f: FormData) {
   await db.prepare(
     "insert into mcp_servers (id,name,url,headers_json) values (?,?,?,?) on conflict(name) do update set url=excluded.url, headers_json=excluded.headers_json",
   ).run(crypto.randomUUID().slice(0, 8), name, url, auth ? seal(JSON.stringify({ Authorization: auth })) : "{}");
-  revalidatePath("/settings");
+  revalidatePath("/library");
 }
 
 export async function toggleMcp(id: string) {
   await requireAuth();
   await db.prepare("update mcp_servers set enabled = 1 - enabled where id=?").run(id);
-  revalidatePath("/settings");
+  revalidatePath("/library");
 }
 
 export async function deleteMcp(id: string) {
@@ -160,7 +160,7 @@ export async function uploadKnowledge(f: FormData): Promise<{ ok: boolean; text:
     added++;
   }
   const { left } = await embedMissing(); // one pass for the whole upload
-  revalidatePath("/settings");
+  revalidatePath("/library");
   const skipped = files.length - added;
   return { ok: added > 0, text: `Added ${added}${skipped ? `, skipped ${skipped} (unsupported or over 2MB)` : ""}${left ? `. ${left} chunks are keyword-only until embedded` : ""}` };
 }
@@ -168,26 +168,26 @@ export async function uploadKnowledge(f: FormData): Promise<{ ok: boolean; text:
 export async function deleteKnowledgeDoc(id: number) {
   await requireAuth();
   await deleteDoc(id);
-  revalidatePath("/settings");
+  revalidatePath("/library");
 }
 
 export async function deleteKnowledgeFolder(path: string) {
   await requireAuth();
   await deleteFolder(path);
-  revalidatePath("/settings");
+  revalidatePath("/library");
 }
 
 export async function embedKnowledge() {
   await requireAuth();
   await embedMissing();
-  revalidatePath("/settings");
+  revalidatePath("/library");
 }
 
 export async function importGithubDocs(f: FormData): Promise<{ ok: boolean; text: string }> {
   await requireAuth();
   try {
     const { n, truncated } = await importGithub(s(f, "repo"), s(f, "dir"), s(f, "token"));
-    revalidatePath("/settings");
+    revalidatePath("/library");
     return { ok: true, text: `Imported ${n} files${truncated ? " (repo too large: only the first 200 docs were taken, narrow with a folder)" : ""}` };
   } catch (e) {
     return { ok: false, text: e instanceof Error ? e.message : String(e) };

@@ -1,14 +1,7 @@
 import { deleteAgent, saveAgent } from "@/lib/actions";
 import { listMcp, listSkills, type Agent } from "@/lib/db";
 import { MODELS } from "@/lib/models";
-import { toolNames } from "@/lib/tools";
-
-const Section = ({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) => (
-  <section className="space-y-3">
-    <h2 className="text-sm font-medium">{title}{hint && <span className="ml-2 font-normal text-mute">{hint}</span>}</h2>
-    {children}
-  </section>
-);
+import { DEFAULT_TOOLS, toolInfo, toolNames } from "@/lib/tools";
 
 export async function AgentForm({ agent }: { agent?: Agent }) {
   const tools: string[] = agent ? JSON.parse(agent.tools_json) : [];
@@ -18,53 +11,57 @@ export async function AgentForm({ agent }: { agent?: Agent }) {
   return (
     <form action={saveAgent} className="space-y-10">
       {agent && <input type="hidden" name="id" value={agent.id} />}
-      <Section title="Identity">
+      <div className="space-y-3">
         <input className="field" name="name" placeholder="Name" defaultValue={agent?.name} required aria-label="Name" />
-        <input className="field" name="description" placeholder="One-line role (shown on the card)" defaultValue={agent?.description} aria-label="Description" />
-      </Section>
-      <Section title="Behavior">
-        <textarea className="field min-h-32" name="instructions" placeholder="Instructions: who is this agent and how does it behave?" defaultValue={agent?.instructions} aria-label="Instructions" />
-        <label className="block space-y-1 text-sm">
-          <span className="text-mute">Model</span>
-          <select className="field" name="model" defaultValue={agent?.model ?? ""}>
-            <option value="">Default (from Settings)</option>
-            {MODELS.map((m) => <option key={m}>{m}</option>)}
-          </select>
-        </label>
-      </Section>
-      {/* new agents start with abilities open; existing ones keep them folded and show what they have */}
-      <details open={!agent} className="border-t border-line pt-6">
-        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium [&::-webkit-details-marker]:hidden">
-          <span>Abilities</span>
-          <span className="font-mono text-xs font-normal text-mute">{tools.length} tools · {skills.length} skills · {mcp.length} connections</span>
+        <textarea className="field min-h-40" name="instructions" placeholder="Instructions: who is this agent and how does it behave?" defaultValue={agent?.instructions} aria-label="Instructions" />
+      </div>
+      <details className="border-t border-line pt-6">
+        <summary className="cursor-pointer text-sm font-medium">
+          Abilities
+          <span className="ml-2 text-xs font-normal text-mute">{agent ? `${tools.length} on` : `${DEFAULT_TOOLS.length} on by default`}{skills.length + mcp.length > 0 && ` · ${skills.length} skills · ${mcp.length} connections`}</span>
         </summary>
         <div className="mt-6 space-y-8">
-          <fieldset className="space-y-2 text-sm">
-            <legend className="mb-2 text-mute">Tools <span>(UI components are always available)</span></legend>
+          <fieldset className="space-y-3 text-sm">
             {toolNames.map((t) => (
-              <label key={t} className="mr-4 inline-flex items-center gap-2 font-mono text-xs">
-                <input type="checkbox" name="tools" value={t} defaultChecked={tools.includes(t)} className="accent-current" /> {t}
+              <label key={t} className="flex items-start gap-3">
+                <input type="checkbox" name="tools" value={t} defaultChecked={agent ? tools.includes(t) : DEFAULT_TOOLS.includes(t)} className="mt-1 accent-current" />
+                <span>{toolInfo[t].label}<span className="block text-xs text-mute">{toolInfo[t].hint}</span></span>
               </label>
             ))}
           </fieldset>
-          <fieldset className="space-y-2 text-sm">
-            <legend className="mb-2 text-mute">Skills</legend>
-            {(await listSkills()).map((k) => (
-              <label key={k.id} className="mr-4 inline-flex items-center gap-2 font-mono text-xs">
-                <input type="checkbox" name="skills" value={k.name} defaultChecked={skills.includes(k.name)} className="accent-current" /> {k.name}
-              </label>
-            ))}
-          </fieldset>
+          {(await listSkills()).length > 0 && (
+            <fieldset className="space-y-2 text-sm">
+              <legend className="mb-2 text-mute">Skills</legend>
+              {(await listSkills()).map((k) => (
+                <label key={k.id} className="mr-4 inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="skills" value={k.name} defaultChecked={skills.includes(k.name)} className="accent-current" /> {k.name}
+                </label>
+              ))}
+            </fieldset>
+          )}
           {servers.length > 0 && (
             <fieldset className="space-y-2 text-sm">
               <legend className="mb-2 text-mute">Connections <span>(each tool call asks for approval)</span></legend>
               {servers.map((m) => (
-                <label key={m.id} className="mr-4 inline-flex items-center gap-2 font-mono text-xs">
+                <label key={m.id} className="mr-4 inline-flex items-center gap-2 text-sm">
                   <input type="checkbox" name="mcp" value={m.id} defaultChecked={mcp.includes(m.id)} className="accent-current" /> {m.name}
                 </label>
               ))}
             </fieldset>
           )}
+        </div>
+      </details>
+      <details className="border-t border-line pt-6">
+        <summary className="cursor-pointer text-sm font-medium">Advanced</summary>
+        <div className="mt-6 space-y-3">
+          <input className="field" name="description" placeholder="One-line role (shown when you start a chat)" defaultValue={agent?.description} aria-label="Description" />
+          <label className="block space-y-1 text-sm">
+            <span className="text-mute">Model</span>
+            <select className="field" name="model" defaultValue={agent?.model ?? ""}>
+              <option value="">Default (from Settings)</option>
+              {MODELS.map((m) => <option key={m}>{m}</option>)}
+            </select>
+          </label>
         </div>
       </details>
       <div className="sticky bottom-0 border-t border-line glass py-4">

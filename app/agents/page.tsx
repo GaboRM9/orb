@@ -1,15 +1,8 @@
 import Link from "next/link";
 import { Avatar } from "@/components/avatar";
-import { getSetting, listAgents, type Agent } from "@/lib/db";
+import { getSetting, listAgents } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-// "3 tools, 1 skill" in plain words; MCP only when the agent has servers
-function capabilities(a: Agent) {
-  const mcp = JSON.parse(a.mcp_json).length;
-  return [plural(JSON.parse(a.tools_json).length, "tool"), plural(JSON.parse(a.skills_json).length, "skill"), ...(mcp ? [plural(mcp, "connection")] : [])].join(", ");
-}
 
 export default async function AgentsPage() {
   return (
@@ -18,7 +11,6 @@ export default async function AgentsPage() {
       {!(await getSetting("api_key")) && !process.env.ANTHROPIC_API_KEY && (
         <p className="text-sm">Add your Anthropic key in <Link href="/settings" className="underline">Settings</Link> to start chatting.</p>
       )}
-      <p className="text-sm text-mute">Each agent is a persona with its own instructions, model, tools and skills. Open one to chat.</p>
       <div className="divide-y divide-line border-y border-line">
         {(await listAgents()).map((a) => (
           <div key={a.id} className="group relative flex items-center gap-4 py-5">
@@ -26,9 +18,8 @@ export default async function AgentsPage() {
             <div className="min-w-0 flex-1">
               <Link href={`/agents/${a.id}`} className="font-medium after:absolute after:inset-0">{a.name}</Link>
               <p className="truncate text-sm text-mute">{a.description || "No description"}</p>
-              <p className="text-xs text-mute">{capabilities(a)}</p>
             </div>
-            <Link href={`/agents/${a.id}/edit`} className="relative z-10 text-xs text-mute hover:text-fg">Edit</Link>
+            <Link href={`/agents/${a.id}/edit`} className="relative z-10 text-sm text-mute hover:text-fg">Edit</Link>
           </div>
         ))}
       </div>

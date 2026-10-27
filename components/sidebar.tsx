@@ -3,12 +3,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { deleteThread } from "@/lib/actions";
-import { BotIcon, GearIcon, MenuIcon, OrbIcon, PanelLeftIcon, PlusIcon, XIcon, ZapIcon } from "./icons";
+import { BookIcon, BotIcon, GearIcon, MenuIcon, OrbIcon, PanelLeftIcon, PlusIcon, XIcon } from "./icons";
 
 type Thread = { id: string; title: string };
 
 // [label, href, icon, path prefix that keeps the tab highlighted]
-const tabs = [["Agents", "/agents", BotIcon, "/agents"], ["Skills", "/skills", ZapIcon, "/skills"], ["Settings", "/settings", GearIcon, "/settings"]] as const;
+const tabs = [["Agents", "/agents", BotIcon, "/agents"], ["Library", "/library", BookIcon, "/library"], ["Settings", "/settings", GearIcon, "/settings"]] as const;
 
 // collapsed state lives in localStorage; the server renders expanded
 const listeners = new Set<() => void>();

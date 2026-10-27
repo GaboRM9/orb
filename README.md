@@ -33,9 +33,9 @@ flowchart LR
   T --> L[(runs · tool_calls · approvals)]
 ```
 
-Each request is one **run**: model, tokens, duration, every tool call and every approve/deny decision are written to the database and shown in the Runs tab. The loop stops after 8 steps.
+Each request is one **run**: model, tokens, duration, every tool call and every approve/deny decision are written to the database and shown under Settings → Activity. The loop stops after 8 steps.
 
-## Knowledge (RAG, Settings → Knowledge)
+## Knowledge (RAG, Library → Knowledge)
 
 Upload files or a folder, or import a GitHub repo's docs; they appear as a folder tree. Turn on the `searchKnowledge` tool in an agent and it retrieves the top passages and cites their path.
 

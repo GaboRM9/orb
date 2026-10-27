@@ -41,6 +41,17 @@ export const allTools = {
 /** Built-in tools with outbound side effects: the user approves each call in the chat (MCP tools always do). */
 export const APPROVAL_TOOLS = new Set<string>(["fetchUrl", "createSkill"]);
 
+/** Plain-language names for the abilities screens. */
+export const toolInfo: Record<keyof typeof allTools, { label: string; hint: string }> = {
+  getTime: { label: "Know the time", hint: "Current date and time, in any time zone" },
+  calculate: { label: "Do math", hint: "Arithmetic" },
+  fetchUrl: { label: "Read web pages", hint: "Opens a link; asks you first" },
+  searchKnowledge: { label: "Search your knowledge", hint: "Documents in your Library" },
+  searchThreads: { label: "Search past chats", hint: "Titles of your saved conversations" },
+};
+/** On for a brand-new agent: everything except outbound network access. */
+export const DEFAULT_TOOLS = ["getTime", "calculate", "searchKnowledge", "searchThreads"];
+
 export const toolNames = Object.keys(allTools) as (keyof typeof allTools)[];
 
 /** Enabled demo tools + `loadSkill`, which lazily returns a skill's full body. */
