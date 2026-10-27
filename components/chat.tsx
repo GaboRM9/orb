@@ -3,7 +3,6 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, lastAssistantMessageIsCompleteWithApprovalResponses, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { renderUiPart, type ChatMessage } from "./gen-ui";
 
-const TEST_UI = `Test UI: build me a weekend trip planner. (1) Ask me a form with destination (text), budget (slider 200-5000), start date (date), accent color (color) and a toggle for "include flights". (2) Show your plan as a checklist. (3) Show the places on a map with accurate coordinates. (4) Show the day-by-day schedule as a timeline. (5) Show a cost breakdown as a table and a bar chart of spend per category. (6) Show 3 hotel options as cards. (7) Finally ask me to pick one upgrade option.`;
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -11,8 +10,6 @@ import { Avatar } from "./avatar";
 import { OrbIcon } from "./icons";
 
 type ChatAgent = { id: string; name: string; description: string };
-
-const dev = process.env.NODE_ENV !== "production"; // the showcase prompt is a dev-only shortcut
 
 // plain-language labels for built-in tools; anything else (MCP tools) shows its own name
 const verbs: Record<string, [running: string, done: string]> = {
@@ -95,7 +92,6 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
         {!messages.length && (
           <div className="mt-24 space-y-3 text-center text-sm text-mute">
             <p>{agent ? `Say hi to ${agent.name}.` : "Ask anything."}</p>
-            {dev && !agent && <button className="btn" onClick={() => sendMessage({ text: TEST_UI })}>Run UI showcase</button>}
           </div>
         )}
         {messages.map((m) => {
