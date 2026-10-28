@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { consumeStream, convertToModelMessages, createIdGenerator, createUIMessageStreamResponse, generateId, isStepCount, streamText, toUIMessageStream, type SystemModelMessage, type UIMessage } from "ai";
 import { asUser, envKey, getAgent, getSetting, inWorkspace, requestSession, threadAgentId } from "@/lib/db";
 import { fitContext, loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
+import { fileError } from "@/lib/files";
 import { addUsage, DEFAULT_MODEL, type Usage } from "@/lib/models";
 import { allowedMcp, MCP_PREFIX, mcpApproval, openMcp } from "@/lib/mcp";
 import { open } from "@/lib/secret";
@@ -27,9 +28,14 @@ export async function POST(req: Request) {
   const apiKey = open(await getSetting("api_key")) || (await envKey("ANTHROPIC_API_KEY"));
   if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
   const budget = Number(process.env.DAILY_BUDGET_USD) || 0;
-  if (budget && (await spentToday()) >= budget)
+  if (budget && (await scoped(() => spentToday())) >= budget)
     return new Response(`Today's budget of $${budget} is used up. It resets at midnight.`, { status: 429 });
+  const mine = Number(process.env.USER_DAILY_BUDGET_USD) || 0;
+  if (mine && (await scoped(() => spentToday(uid))) >= mine)
+    return new Response(`Your budget of $${mine} for today is used up. It resets at midnight.`, { status: 429 });
 
+  const badFile = fileError(message);
+  if (badFile) return new Response(badFile, { status: 400 });
   const messages = mergeMessage(await scoped(() => loadChat(id)), message);
   const agent = await getAgent((await scoped(() => threadAgentId(id))) ?? agentId); // a thread keeps the agent it started with
   const genUi = (await getSetting("gen_ui", "on")) !== "off"; // beta switch in Settings: off means plain-text answers

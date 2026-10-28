@@ -3,13 +3,17 @@ import { db, me, ws } from "./db";
 
 // ponytail: ~4 chars per token; swap for a real token count if the budget needs to be exact
 const BUDGET_CHARS = 400_000; // ~100k tokens: leaves room for tools, the reply and this run's tool output
+// ponytail: every attachment is sized as ~2k tokens (an image is ~1.6k at most; a long PDF is more)
+const FILE_CHARS = 8_000;
+const FILE_PLACEHOLDER = "x".repeat(FILE_CHARS);
 
 /**
  * Keeps a conversation inside the context budget. Under budget it is sent untouched, so the cached prefix stays valid.
  * Over budget: old tool calls/results and reasoning go first, then the oldest turns, always cutting at a user message.
  */
 export function fitContext(messages: ModelMessage[], budget = BUDGET_CHARS) {
-  const size = (m: ModelMessage[]) => JSON.stringify(m).length;
+  // an attachment counts as FILE_CHARS, not its base64, so one image doesn't push the rest of the history out
+  const size = (m: ModelMessage[]) => JSON.stringify(m, (k, v) => (k === "data" && !(typeof v === "string" && v.length < FILE_CHARS) ? FILE_PLACEHOLDER : v)).length;
   if (size(messages) <= budget) return messages;
   let out = pruneMessages({ messages, reasoning: "before-last-message", toolCalls: "before-last-4-messages", emptyMessages: "remove" });
   while (size(out) > budget) {

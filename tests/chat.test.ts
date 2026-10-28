@@ -102,6 +102,26 @@ describe("fitContext", () => {
     assert.deepEqual(out.at(-1), msgs.at(-1));
     assert.ok(JSON.stringify(out).length <= 400);
   });
+  it("sizes an attachment as a fixed amount, not its base64, so one image keeps the history", () => {
+    const img = { role: "user" as const, content: [{ type: "file" as const, mediaType: "image/png", data: "A".repeat(2_000_000) }] };
+    const msgs = [m("user", "earlier"), m("assistant", "ok"), img];
+    assert.equal(store.fitContext(msgs), msgs);
+  });
+});
+
+describe("fileError", () => {
+  const msg = (...files: { mediaType: string; url: string }[]): UIMessage => ({ id: "u", role: "user", parts: [{ type: "text", text: "see" }, ...files.map((f) => ({ type: "file" as const, ...f }))] });
+  it("accepts inline images, PDFs and text", async () => {
+    const { fileError } = await import("../lib/files");
+    assert.equal(fileError(msg({ mediaType: "image/png", url: "data:image/png;base64,AAAA" }, { mediaType: "application/pdf", url: "data:application/pdf;base64,AAAA" })), null);
+  });
+  it("refuses hosted URLs, other types, mismatched data URLs and more than 3 MB", async () => {
+    const { fileError } = await import("../lib/files");
+    assert.ok(fileError(msg({ mediaType: "image/png", url: "http://169.254.169.254/latest" })), "a URL the server would fetch");
+    assert.ok(fileError(msg({ mediaType: "application/zip", url: "data:application/zip;base64,AAAA" })));
+    assert.ok(fileError(msg({ mediaType: "image/png", url: "data:application/zip;base64,AAAA" })));
+    assert.ok(fileError(msg({ mediaType: "image/png", url: "data:image/png;base64," + "A".repeat(4_100_000) })));
+  });
 });
 
 describe("runCost", () => {

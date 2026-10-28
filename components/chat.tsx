@@ -6,7 +6,8 @@ import { alwaysAllowMcpTool } from "@/lib/actions";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, StopIcon } from "./icons";
+import { ArrowUpIcon, PaperclipIcon, StopIcon, XIcon } from "./icons";
+import { FILE_TYPES, MAX_FILE_BYTES } from "@/lib/files";
 
 type ChatAgent = { id: string; name: string; description: string };
 
@@ -59,6 +60,10 @@ function ToolRun({ parts }: { parts: ToolPart[] }) {
   );
 }
 
+// Markdown, CSV and other text files go to the model as plain text: it reads text/plain, not every text/* type.
+const TEXTISH = /\.(md|mdx|txt|csv|json|ya?ml|log)$/i;
+const asAttachment = (f: File) => (f.type.startsWith("text/") || (!f.type && TEXTISH.test(f.name)) ? new File([f], f.name, { type: "text/plain" }) : f);
+
 // chat id → toolCallId → what that surface shows now (set when the user changes it, sent with the next message)
 const surfaceStates = new Map<string, Record<string, string>>();
 
@@ -76,6 +81,20 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
     [agentId],
   );
   const [input, setInput] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileMsg, setFileMsg] = useState("");
+  const picker = useRef<HTMLInputElement>(null);
+  const attach = (picked: FileList | null) => {
+    const next = [...files, ...[...(picked ?? [])].map(asAttachment)];
+    const bad = next.find((f) => !FILE_TYPES.includes(f.type));
+    if (bad) setFileMsg(`Can't attach ${bad.name}: use an image, PDF or text file.`);
+    else if (next.reduce((n, f) => n + f.size, 0) > MAX_FILE_BYTES) setFileMsg("Attachments are limited to 3 MB per message.");
+    else {
+      setFiles(next);
+      setFileMsg("");
+    }
+    if (picker.current) picker.current.value = "";
+  };
   const end = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   const { messages, sendMessage, addToolOutput, addToolApprovalResponse, status, error, stop } = useChat<ChatMessage>({
@@ -133,6 +152,13 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
                   };
                   m.parts.forEach((p, i) => {
                     if (p.type === "text") return (flush(i), blocks.push(<p key={i} className="whitespace-pre-wrap">{p.text}</p>));
+                    if (p.type === "file")
+                      return (flush(i), blocks.push(
+                        p.mediaType.startsWith("image/")
+                          // eslint-disable-next-line @next/next/no-img-element -- an inline data URL; next/image has nothing to optimize
+                          ? <img key={i} src={p.url} alt={p.filename ?? "Attached image"} className={`max-h-64 rounded-md border border-line ${m.role === "user" ? "ml-auto" : ""}`} />
+                          : <span key={i} className={`chip block w-fit ${m.role === "user" ? "ml-auto" : ""}`}>{p.filename ?? p.mediaType}</span>,
+                      ));
                     if (isToolUIPart(p) && p.state === "approval-requested" && !p.approval.isAutomatic) {
                       const respond = (approved: boolean) => addToolApprovalResponse({ id: p.approval.id, approved });
                       flush(i);
@@ -191,25 +217,42 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
           </div>
         )}
         {error && <p className="text-sm text-fg">{error.message}</p>}
+        {fileMsg && <p role="status" className="text-sm text-mute">{fileMsg}</p>}
         <div ref={end} />
       </div>
       {/* the composer floats: messages fade out under it instead of stopping at a hard edge */}
       <div className={`relative ${empty ? "" : "pb-6 before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-linear-to-t before:from-bg"}`}>
         <form
-          className="composer flex items-end gap-2 rounded-ctl border border-line bg-bg py-1.5 pl-5 pr-1.5 shadow-lg transition-shadow focus-within:border-accent focus-within:ring-3 focus-within:ring-ring"
+          className="composer flex flex-wrap items-end gap-2 rounded-ctl border border-line bg-bg py-1.5 px-1.5 shadow-lg transition-shadow focus-within:border-accent focus-within:ring-3 focus-within:ring-ring"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!input.trim() || busy) return;
-            sendMessage({ text: input });
+            if ((!input.trim() && !files.length) || busy) return;
+            const dt = new DataTransfer();
+            files.forEach((f) => dt.items.add(f));
+            sendMessage(input.trim() ? { text: input, files: dt.files } : { files: dt.files });
             setInput("");
+            setFiles([]);
           }}
         >
+          {files.length > 0 && (
+            <div className="flex basis-full flex-wrap gap-1.5 pt-1.5">
+              {files.map((f, i) => (
+                <span key={i} className="chip flex items-center gap-1">
+                  {f.name}
+                  <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}><XIcon /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          <input ref={picker} type="file" multiple hidden accept={[...FILE_TYPES, ".md,.csv,.json,.yaml,.yml"].join(",")} onChange={(e) => attach(e.target.files)} />
+          <button type="button" onClick={() => picker.current?.click()} aria-label="Attach files" className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl text-mute hover:text-fg"><PaperclipIcon /></button>
           <textarea
             ref={box}
             rows={1}
             className="max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm leading-6 outline-none placeholder:text-mute"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={(e) => e.clipboardData.files.length && (e.preventDefault(), attach(e.clipboardData.files))}
             onKeyDown={(e) => {
               // Enter sends; Shift+Enter inserts a newline; IME composition is left alone
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -225,7 +268,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
           {busy ? (
             <button type="button" onClick={() => { stop(); void fetch(`/api/chat?id=${encodeURIComponent(id)}`, { method: "DELETE" }); }} aria-label="Stop" className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl bg-accent text-on-accent"><StopIcon /></button>
           ) : (
-            <button aria-label="Send" disabled={!input.trim()} className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl bg-accent text-on-accent transition-colors disabled:bg-surface-2 disabled:text-mute"><ArrowUpIcon /></button>
+            <button aria-label="Send" disabled={!input.trim() && !files.length} className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl bg-accent text-on-accent transition-colors disabled:bg-surface-2 disabled:text-mute"><ArrowUpIcon /></button>
           )}
         </form>
       </div>

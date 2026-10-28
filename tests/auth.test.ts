@@ -71,3 +71,46 @@ it("removing a member from the workspace ends their session", async () => {
   assert.equal(await d.sessionFor(t), null);
   assert.equal(await d.signIn("cy@example.com", "cy's password"), null, "no workspace, no sign-in");
 });
+
+it("admins add, promote, reset and remove members; the workspace keeps an admin", async () => {
+  const w = d.DEFAULT_WS;
+  const added = await d.addMember(w, " Dee@Example.com ", "member");
+  assert.ok("password" in added);
+  assert.ok("error" in (await d.addMember(w, "dee@example.com", "admin")), "an email has one account");
+  assert.ok("error" in (await d.addMember(w, "not an email", "member")));
+  const t = await tokenFor("dee@example.com", added.password);
+  const dee = (await d.sessionFor(t))!;
+  assert.equal(dee.role, "member");
+
+  await d.setMemberRole(w, dee.uid, "admin");
+  assert.equal((await d.sessionFor(t))?.role, "admin", "a role change lands without signing in again");
+
+  const reset = await d.resetMemberPassword(w, dee.uid);
+  assert.ok("password" in reset);
+  assert.equal(await d.sessionFor(t), null, "a reset signs them out");
+  assert.equal(await d.signIn("dee@example.com", added.password), null);
+  const t2 = await tokenFor("dee@example.com", reset.password);
+
+  // demoting or removing the last admin is refused
+  for (const m of await d.listMembers(w)) if (m.id !== dee.uid && m.role === "admin") await d.setMemberRole(w, m.id, "member");
+  assert.ok("error" in (await d.setMemberRole(w, dee.uid, "member")));
+  assert.ok("error" in (await d.removeMember(w, dee.uid)));
+
+  const eve = await d.addMember(w, "eve@example.com", "member");
+  assert.ok("password" in eve);
+  const eveId = (await d.listMembers(w)).find((m) => m.email === "eve@example.com")!.id;
+  assert.deepEqual(await d.removeMember(w, eveId), {});
+  assert.equal(await d.signIn("eve@example.com", eve.password), null, "removed accounts can't sign in");
+  assert.ok("password" in (await d.addMember(w, "eve@example.com", "member")), "and the email can be added again");
+  assert.ok(await d.sessionFor(t2));
+});
+
+it("an admin can't reset the password of someone who is also in another workspace", async () => {
+  await d.db.prepare("insert or ignore into workspaces (id, name, created) values ('other', 'Other', ?)").run(Date.now());
+  const uid = await addUser("fay@example.com", "fay's password", "member");
+  await d.db.prepare("insert into members (workspace_id, user_id, role) values ('other', ?, 'admin')").run(uid);
+  assert.ok("error" in (await d.resetMemberPassword(d.DEFAULT_WS, uid)));
+  assert.ok("error" in (await d.resetMemberPassword("other", "nobody")), "not a member");
+  await d.removeMember(d.DEFAULT_WS, uid);
+  assert.ok(await d.signIn("fay@example.com", "fay's password"), "removed here, the account stays for the other workspace");
+});

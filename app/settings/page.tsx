@@ -4,7 +4,8 @@ import { MIN_PASSWORD } from "@/lib/auth";
 import { clearKey, clearOpenAIKey, clearThreads, saveGenUi, saveSettings, saveTheme } from "@/lib/actions";
 import { parseTheme } from "@/lib/theme";
 import { RunsPanel } from "@/components/runs-panel";
-import { getSetting, isAdmin } from "@/lib/db";
+import { Members } from "@/components/members";
+import { DEFAULT_WS, getSetting, listMembers, requireAuth } from "@/lib/db";
 import { DEFAULT_MODEL, MODELS } from "@/lib/models";
 
 export const dynamic = "force-dynamic";
@@ -35,13 +36,15 @@ async function AI({ password }: { password?: string }) {
   const model = await getSetting("model", DEFAULT_MODEL);
   const theme = parseTheme(await getSetting("theme", "{}"));
   const genUi = (await getSetting("gen_ui", "on")) !== "off";
-  const admin = await isAdmin();
+  const s = await requireAuth();
+  const admin = s.role === "admin";
+  const env = s.workspace === DEFAULT_WS; // only the first workspace may fall back to the env keys (envKey)
   return (
     <div className="space-y-6">
       {admin ? (<>
       <form action={saveSettings} className="space-y-4">
         <label className="block space-y-1 text-sm">
-          <span>Anthropic API key {hasKey ? <span className="text-mute">(saved — leave blank to keep)</span> : <span className="text-mute">(or set ANTHROPIC_API_KEY)</span>}</span>
+          <span>Anthropic API key {hasKey ? <span className="text-mute">(saved — leave blank to keep)</span> : <span className="text-mute">{env ? "(or set ANTHROPIC_API_KEY)" : "(required)"}</span>}</span>
           <input className="field font-mono" name="api_key" type="password" placeholder="sk-ant-…" autoComplete="off" />
         </label>
         <label className="block space-y-1 text-sm">
@@ -51,7 +54,7 @@ async function AI({ password }: { password?: string }) {
           </select>
         </label>
         <label className="block space-y-1 text-sm">
-          <span>OpenAI API key, for searching your Library {hasOpenAI ? <span className="text-mute">(saved — leave blank to keep)</span> : <span className="text-mute">(optional, or set OPENAI_API_KEY; keyword search works without it)</span>}</span>
+          <span>OpenAI API key, for searching your Library {hasOpenAI ? <span className="text-mute">(saved — leave blank to keep)</span> : <span className="text-mute">{env ? "(optional, or set OPENAI_API_KEY; keyword search works without it)" : "(optional; keyword search works without it)"}</span>}</span>
           <input className="field font-mono" name="openai_key" type="password" placeholder="sk-…" autoComplete="off" />
         </label>
         <div className="flex gap-2">
@@ -72,6 +75,10 @@ async function AI({ password }: { password?: string }) {
           ))}
         </div>
       </form>
+      <section className="space-y-3 border-t border-line pt-6">
+        <h2 className="text-sm">Members</h2>
+        <Members members={await listMembers(s.workspace)} me={s.uid} />
+      </section>
       </>) : (
         <p className="text-sm text-mute">Model: {model}. API keys, Generative UI and connections are managed by a workspace admin.</p>
       )}
