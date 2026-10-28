@@ -1,8 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { after } from "next/server";
 import { consumeStream, convertToModelMessages, createIdGenerator, createUIMessageStreamResponse, generateId, isStepCount, streamText, toUIMessageStream, type SystemModelMessage, type UIMessage } from "ai";
-import { requestAuthed } from "@/lib/auth";
-import { envKey, getAgent, getSetting, inWorkspace, threadAgentId, ws } from "@/lib/db";
+import { envKey, getAgent, getSetting, inWorkspace, requestSession, threadAgentId } from "@/lib/db";
 import { fitContext, loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
 import { addUsage, DEFAULT_MODEL, type Usage } from "@/lib/models";
 import { allowedMcp, MCP_PREFIX, mcpApproval, openMcp } from "@/lib/mcp";
@@ -19,10 +18,11 @@ const STOP_POLL_MS = 500;
 
 export async function POST(req: Request) {
   const started = Date.now();
-  if (!requestAuthed(req)) return new Response("Unauthorized", { status: 401 });
+  const session = await requestSession(req);
+  if (!session) return new Response("Unauthorized", { status: 401 });
   const { id, message, agentId, context }: { id: string; message: UIMessage; agentId?: string; context?: unknown } = await req.json();
   // callbacks below can run after the response ends, outside the request: they get the workspace explicitly
-  const w = await ws();
+  const w = session.workspace;
   const scoped = <T,>(fn: () => Promise<T>) => inWorkspace(w, fn);
   const apiKey = open(await getSetting("api_key")) || (await envKey("ANTHROPIC_API_KEY"));
   if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
 
 /** Stop button: flags the thread; its running turn sees the flag within STOP_POLL_MS and aborts, keeping what it has so far. */
 export async function DELETE(req: Request) {
-  if (!requestAuthed(req)) return new Response("Unauthorized", { status: 401 });
+  if (!(await requestSession(req))) return new Response("Unauthorized", { status: 401 });
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return new Response("Missing id", { status: 400 });
   await requestStop(id);

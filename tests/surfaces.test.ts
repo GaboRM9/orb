@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { before, describe, it } from "node:test";
 import { z } from "zod";
 
+process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "surf-")), "test.db");
 process.env.ADMIN_PASSWORD = "test-pass";
 
 let lib: typeof import("../lib/surfaces");
@@ -11,6 +15,9 @@ let ui: typeof import("../lib/ui-tools");
 
 before(async () => {
   [lib, route, auth, ui] = await Promise.all([import("../lib/surfaces"), import("../app/api/surfaces/[name]/route"), import("../lib/auth"), import("../lib/ui-tools")]);
+  const { db } = await import("../lib/db");
+  await db.prepare("insert into users (id, email, pass_hash, created) values ('u1', 'ada@x.test', 'x', 0)").run();
+  await db.prepare("insert into members (workspace_id, user_id) values ('default', 'u1')").run();
   // a stand-in surface: echoes its params, or returns a huge payload on request
   lib.surfaces.echo = lib.defineSurface({
     name: "echo",
@@ -22,7 +29,7 @@ before(async () => {
   });
 });
 
-const refresh = (name: string, params: unknown, cookie = `${auth.COOKIE}=${auth.makeToken()}`) =>
+const refresh = (name: string, params: unknown, cookie = `${auth.COOKIE}=${auth.makeToken("u1", "default", 0)}`) =>
   route.POST(new Request(`http://x/api/surfaces/${name}`, { method: "POST", headers: { cookie }, body: JSON.stringify({ params }) }), { params: Promise.resolve({ name }) } as never);
 
 describe("surfaces", () => {

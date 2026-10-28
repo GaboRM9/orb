@@ -1,8 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { createClient, type Client, type InStatement, type Transaction } from "@libsql/client";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { checkPassword, COOKIE, cookieToken, hashPassword, parseToken } from "./auth";
 import { isSealed, seal } from "./secret";
 
 // Hosted: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (Vercel Marketplace). Local/tests: a SQLite file at DB_PATH.
@@ -182,13 +184,53 @@ const scope = new AsyncLocalStorage<string>();
 export const inWorkspace = <T,>(id: string, fn: () => T) => scope.run(id, fn);
 export const workspaceScope = scope;
 
-/** The workspace every query is scoped to. Outside a request or an inWorkspace() it throws, so a query can never fall back to another org's rows. */
+export type Session = { uid: string; workspace: string; role: "admin" | "member" };
+const checked = new Map<string, { s: Session | null; at: number }>();
+/**
+ * The member behind a session token, or null: the signature must hold, the user must still be a member of the
+ * workspace, and token_v must match (bump it to sign a user out everywhere).
+ */
+export async function sessionFor(token: string | undefined): Promise<Session | null> {
+  const t = parseToken(token);
+  if (!t) return null;
+  // ponytail: per-instance 10s memo, so a page's many queries cost one lookup; revocation lands within 10s
+  const hit = checked.get(token!);
+  if (hit && Date.now() - hit.at < 10_000) return hit.s;
+  const row = (await db.prepare(
+    "select m.role from users u join members m on m.user_id=u.id where u.id=? and u.token_v=? and m.workspace_id=?",
+  ).get(t.uid, t.tokenV, t.workspace)) as { role: Session["role"] } | undefined;
+  const s = row ? { uid: t.uid, workspace: t.workspace, role: row.role } : null;
+  if (checked.size > 1000) checked.clear();
+  checked.set(token!, { s, at: Date.now() });
+  return s;
+}
+export const session = async () => sessionFor((await cookies()).get(COOKIE)?.value);
+/** For route handlers. */
+export const requestSession = (req: Request) => sessionFor(cookieToken(req));
+
+/** Call first in every server action: the proxy only checks the signature. */
+export async function requireAuth() {
+  const s = await session();
+  if (!s) redirect("/login");
+  return s;
+}
+
+let dummy: string | undefined;
+/** The user and their first workspace if the password matches. Unknown emails cost the same scrypt, so timing doesn't reveal who has an account. */
+export async function signIn(email: string, password: string) {
+  const u = (await db.prepare(
+    "select u.id, u.pass_hash, u.token_v, m.workspace_id from users u join members m on m.user_id=u.id where u.email=? order by m.rowid limit 1",
+  ).get(email.trim())) as { id: string; pass_hash: string; token_v: number; workspace_id: string } | undefined;
+  const ok = checkPassword(password, u?.pass_hash ?? (dummy ??= hashPassword("")));
+  return u && ok ? { uid: u.id, workspace: u.workspace_id, tokenV: u.token_v } : null;
+}
+export const hasUsers = async () => !!(await db.prepare("select 1 from users limit 1").get());
+
+/** The workspace every query is scoped to: an inWorkspace() scope, else the signed-in session's. Otherwise it throws, so a query can never fall back to another org's rows. */
 export async function ws() {
-  const w = scope.getStore();
-  if (w) return w;
-  await cookies(); // throws outside a request
-  // ponytail: every signed-in request is the first workspace until the session carries one (auth phase)
-  return DEFAULT_WS;
+  const w = scope.getStore() ?? (await session())?.workspace;
+  if (!w) throw new Error("No workspace: not signed in");
+  return w;
 }
 
 /** The env API keys are the owner's: only the first workspace may fall back to them; other orgs bring their own. */
