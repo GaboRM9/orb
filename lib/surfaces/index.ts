@@ -1,7 +1,14 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
 import type { Surface, SurfaceResult } from "./define";
+import { clock } from "./clock";
+import { convertUnits } from "./convert";
 import { directions } from "./directions";
+import { fx } from "./fx";
+import { loan } from "./loan";
+import { nearby } from "./nearby";
+import { weather } from "./weather";
+import { wiki } from "./wiki";
 
 export { defineSurface, type Surface, type SurfaceResult } from "./define";
 
@@ -18,14 +25,14 @@ export async function runSurface(s: Surface, raw: unknown): Promise<SurfaceResul
   return { params, data, summary: s.summary(params, data) };
 }
 
-export const surfaces: Record<string, Surface> = { directions };
+export const surfaces: Record<string, Surface> = { weather, directions, nearby, fx, clock, convert: convertUnits, loan, wiki };
 
 const summaryOnly = ({ output }: { output: unknown }) => ({ type: "text" as const, value: (output as SurfaceResult).summary }); // the model gets the summary, the view gets the data
 
 /** "directions(from, to, mode?=walk|bike|drive)": a template's call shape, read off its schema so it can't drift. */
 export function signature(s: Surface) {
-  const j = z.toJSONSchema(s.params, { io: "input" }) as { properties?: Record<string, { enum?: unknown[] }>; required?: string[] };
-  const args = Object.entries(j.properties ?? {}).map(([k, p]) => `${k}${j.required?.includes(k) ? "" : "?"}${p.enum ? `=${p.enum.join("|")}` : ""}`);
+  const j = z.toJSONSchema(s.params, { io: "input" }) as { properties?: Record<string, { enum?: unknown[]; type?: string }>; required?: string[] };
+  const args = Object.entries(j.properties ?? {}).map(([k, p]) => `${k}${p.type === "array" ? "[]" : ""}${j.required?.includes(k) ? "" : "?"}${p.enum ? `=${p.enum.join("|")}` : ""}`);
   return `${s.name}(${args.join(", ")})`;
 }
 export const catalog = () => Object.values(surfaces).map((s) => `- ${signature(s)}: ${s.when}`).join("\n");

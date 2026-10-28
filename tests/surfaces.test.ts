@@ -99,6 +99,65 @@ describe("surfaces", () => {
     }
   });
 
+  it("templates: the logic behind weather, clock, loan, convert and nearby", async () => {
+    assert.match(lib.catalog(), /^- clock\(zones\[\], at\?\): /m);
+    const w = await import("../lib/surfaces/weather");
+    assert.deepEqual([0, 2, 3, 45, 53, 63, 81, 73, 95].map(w.sky), ["clear", "partly", "cloudy", "fog", "drizzle", "rain", "rain", "snow", "storm"]);
+    assert.equal(w.toUnit(100, "f"), 212);
+
+    const c = await import("../lib/surfaces/clock");
+    assert.equal(c.offsetMin("Asia/Kolkata", Date.UTC(2026, 0, 1)), 330);
+    assert.equal(c.zonedTime("2026-07-01T15:00", "Europe/Madrid"), Date.UTC(2026, 6, 1, 13)); // summer time, UTC+2
+    assert.equal(c.zonedTime("2026-12-01T15:00", "Europe/Madrid"), Date.UTC(2026, 11, 1, 14));
+    await assert.rejects(lib.runSurface(lib.surfaces.clock, { zones: ["Mars/Base"] }), /IANA/);
+
+    const l = await import("../lib/surfaces/loan");
+    const a = l.amortize(300_000, 6.5, 30);
+    assert.equal(Math.round(a.monthly), 1896);
+    assert.equal(a.balance.length, 31);
+    assert.equal(Math.round(a.balance.at(-1)!), 0);
+    assert.equal(l.amortize(1200, 0, 1).monthly, 100); // no interest
+
+    const u = await import("../lib/surfaces/convert");
+    assert.equal(u.round(u.convert(10, "km", "mi")), "6.214");
+    assert.equal(u.round(u.convert(100, u.unit("°F"), u.unit("C"))), "37.78");
+    assert.throws(() => u.convert(1, "kg", "km"), /mass to length/);
+    assert.throws(() => u.unit("furlong"), /Known: /);
+
+    const n = await import("../lib/surfaces/nearby");
+    assert.equal(n.distanceM({ lat: 0, lng: 0 }, { lat: 0, lng: 1 }), 111_195); // one degree along the equator
+  });
+
+  it("cards open compact: the headline and quick actions, details only behind a chip", async () => {
+    const { createElement } = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const props = { refetch: () => {}, busy: false, live: true, send: () => {} };
+    const html = (View: unknown, params: unknown, data: unknown) => renderToStaticMarkup(createElement(View as never, { ...props, params, data } as never));
+    const hour = { time: "2026-10-28T14:00", temp: 17, rain: 5, wind: 5, sky: "partly" };
+    const weather = {
+      place: { name: "Barcelona, Barcelonès", lat: 41.4, lng: 2.2 },
+      now: { temp: 17, feels: 19, sky: "partly", day: true, wind: 5, humidity: 93 },
+      hours: [hour, { ...hour, time: "2026-10-28T15:00" }],
+      days: [{ date: "2026-10-28", min: 17, max: 23, rain: 5, sky: "partly", sunrise: "2026-10-28T07:00", sunset: "2026-10-28T18:00" }],
+    };
+    const w = html((await import("../components/surfaces/weather")).WeatherView, { city: "Barcelona", units: "c" }, weather);
+    assert.match(w, /17°.*Partly cloudy.*Feels 19° · Wind 5 km\/h · Humidity 93%/);
+    assert.match(w, /Next hours.*This week.*°F.*What should I wear\? →/);
+    assert.doesNotMatch(w, /Today|Now/, "the hourly strip and the week stay closed");
+
+    const loan = html((await import("../components/surfaces/loan")).LoanView, { amount: 300_000, rate: 6.5, years: 30, currency: "USD" }, null);
+    assert.match(loan, /\$1,896.*\/ month/);
+    assert.doesNotMatch(loan, /type="range"/, "sliders stay behind Adjust");
+
+    const fx = html((await import("../components/surfaces/fx")).FxView, { amount: 100, from: "USD", to: "MXN" }, { from: "USD", to: "MXN", rate: 18.6, date: "2026-10-27", series: [{ date: "2026-10-01", rate: 18 }, { date: "2026-10-27", rate: 18.6 }] });
+    assert.match(fx, /1,860/);
+    assert.doesNotMatch(fx, /<svg/, "the trend stays behind its chip");
+
+    const wiki = html((await import("../components/surfaces/wiki")).WikiView, {}, { title: "Ada Lovelace", description: "mathematician", extract: "One. Two. Three. Four.", image: null, url: "https://en.wikipedia.org/wiki/Ada_Lovelace", ambiguous: false });
+    assert.match(wiki, /One\. Two\.<\/p>/);
+    assert.match(wiki, /Key facts →/);
+  });
+
   it("surface context from the browser is capped and framed as data", () => {
     assert.equal(ui.surfaceContext(undefined), "");
     assert.equal(ui.surfaceContext([1, "", null]), "");

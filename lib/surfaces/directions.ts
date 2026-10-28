@@ -17,7 +17,7 @@ export type DirectionsData = {
   steps: { text: string; distanceM: number }[];
 };
 
-const get = async (url: string) => {
+export const get = async (url: string) => {
   const r = await fetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error(`${new URL(url).host} answered ${r.status}`);
   return r.json();
@@ -28,7 +28,7 @@ const get = async (url: string) => {
 const places = new Map<string, Promise<Place>>();
 const MAX_PLACES = 500;
 let nextSlot = 0;
-const nominatimTurn = () => {
+export const nominatimTurn = () => {
   const now = Date.now();
   const wait = Math.max(0, nextSlot - now);
   nextSlot = Math.max(now, nextSlot) + 1000; // claim the next free second before waiting, so concurrent calls queue up
