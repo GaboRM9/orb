@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient, type Client, type InStatement, type Transaction } from "@libsql/client";
+import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { checkPassword, COOKIE, cookieToken, hashPassword, parseToken } from "./auth";
@@ -115,6 +116,7 @@ async function init() {
     ["approvals", "workspace_id", "text not null default 'default'"],
     ["stops", "workspace_id", "text not null default 'default'"],
     ["login_misses", "email", "text"],
+    ["login_misses", "ip", "text"],
     ["threads", "user_id", "text"],
     ["runs", "user_id", "text"],
     ["approvals", "user_id", "text"],
@@ -260,6 +262,67 @@ export async function changePassword(uid: string, current: string, next: string)
   return r.token_v;
 }
 export const hasUsers = async () => !!(await db.prepare("select 1 from users limit 1").get());
+
+// Members (Settings → Members, scripts/user.mts). There is no workspace switcher, so an account belongs to one workspace:
+// an admin can't add, or reset the password of, someone who is also in another org.
+export type Member = { id: string; email: string; role: Session["role"]; others: number };
+export const listMembers = async (workspace: string) =>
+  (await db.prepare(
+    "select u.id, u.email, m.role, (select count(*) from members o where o.user_id=u.id and o.workspace_id!=m.workspace_id) others from members m join users u on u.id=m.user_id where m.workspace_id=? order by m.rowid",
+  ).all(workspace)) as Member[];
+const newPassword = () => randomBytes(12).toString("base64url");
+
+/** Creates the account and returns its generated password (shown once), or an error for the admin. */
+export async function addMember(workspace: string, email: string, role: Session["role"]): Promise<{ password: string } | { error: string }> {
+  email = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+$/.test(email)) return { error: "That isn't an email address." };
+  if (await db.prepare("select 1 from users where email=?").get(email)) return { error: `${email} already has an account.` };
+  const id = crypto.randomUUID();
+  const password = newPassword();
+  await db.batch([
+    ["insert into users (id, email, pass_hash, created) values (?,?,?,?)", id, email, hashPassword(password), Date.now()],
+    ["insert into members (workspace_id, user_id, role) values (?,?,?)", workspace, id, role],
+  ]);
+  return { password };
+}
+
+// how many other workspaces a member is also in; undefined if they aren't in this one
+const membership = async (workspace: string, uid: string) =>
+  (await db.prepare("select (select count(*) from members o where o.user_id=m.user_id and o.workspace_id!=m.workspace_id) others from members m where m.workspace_id=? and m.user_id=?").get(workspace, uid)) as { others: number } | undefined;
+const lastAdmin = async (workspace: string, uid: string) =>
+  !(await db.prepare("select 1 from members where workspace_id=? and role='admin' and user_id!=?").get(workspace, uid));
+
+/** Changes a member's role; the workspace always keeps one admin. */
+export async function setMemberRole(workspace: string, uid: string, role: Session["role"]) {
+  if (role === "member" && (await lastAdmin(workspace, uid))) return { error: "A workspace needs at least one admin." };
+  await db.prepare("update members set role=? where workspace_id=? and user_id=?").run(role, workspace, uid);
+  checked.clear();
+  return {};
+}
+
+/** Removes the member and their account (which is only ever in this workspace). Their chats, runs and approvals stay as history. */
+export async function removeMember(workspace: string, uid: string) {
+  if (await lastAdmin(workspace, uid)) return { error: "A workspace needs at least one admin." };
+  const m = await membership(workspace, uid);
+  if (!m) return { error: "Not a member." };
+  await db.batch([
+    ["delete from members where workspace_id=? and user_id=?", workspace, uid],
+    ...(m.others ? [] : [["delete from users where id=?", uid] as [string, ...unknown[]]]),
+  ]);
+  checked.clear();
+  return {};
+}
+
+/** Sets a generated password (shown once) and signs the member out everywhere. */
+export async function resetMemberPassword(workspace: string, uid: string): Promise<{ password: string } | { error: string }> {
+  const m = await membership(workspace, uid);
+  if (!m) return { error: "Not a member." };
+  if (m.others) return { error: "This account is also in another workspace; reset it there or with the CLI." };
+  const password = newPassword();
+  await db.prepare("update users set pass_hash=?, token_v=token_v+1 where id=?").run(hashPassword(password), uid);
+  checked.clear();
+  return { password };
+}
 
 /**
  * The workspace every query is scoped to: an inWorkspace() scope, else the signed-in session's. A request whose session

@@ -40,8 +40,8 @@ export const runSummary = async (user: string | null) => {
   ).get({ w: await ws(), u: user, t: today })) as { runs: number; errors: number; pending: number; spent: number };
 };
 
-/** Dollars the whole workspace spent since local midnight (DAILY_BUDGET_USD caps each workspace, not each member). */
-export const spentToday = async () => (await runSummary(null)).spent;
+/** Dollars spent since local midnight by the whole workspace (null, for DAILY_BUDGET_USD) or one member (USER_DAILY_BUDGET_USD). */
+export const spentToday = async (user: string | null = null) => (await runSummary(user)).spent;
 
 // Stop button: the click may land on a different serverless instance than the run, so it goes through the database.
 // The thread row may not exist yet (it's saved when the first turn ends), so the stop carries the workspace instead.

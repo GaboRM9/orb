@@ -1,19 +1,24 @@
 "use server";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { COOKIE, makeToken, MIN_PASSWORD, SESSION_SECONDS } from "@/lib/auth";
 import { changePassword, db, requireAuth, signIn } from "@/lib/db";
 
-// Failed sign-ins live in the database so the throttle (5 misses -> 1 min lock) holds across serverless instances.
-// ponytail: per email, not per IP; a determined guesser can keep one account locked out for a minute at a time.
+// Failed sign-ins live in the database so the throttle holds across serverless instances: 5 misses lock an email for a
+// minute, 20 misses lock the IP (x-forwarded-for, set by Vercel) for a minute, so one client can't walk many accounts.
+// ponytail: an email can still be locked out by anyone guessing it; a CAPTCHA or per-device trust if that gets abused.
+const EMAIL_MISSES = 5;
+const IP_MISSES = 20;
 export async function login(f: FormData) {
   const email = String(f.get("email") ?? "").trim().toLowerCase();
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0].trim() || null;
   const now = Date.now();
   await db.prepare("delete from login_misses where t < ?").run(now - 60_000);
-  if (((await db.prepare("select count(*) n from login_misses where email=?").get(email)) as { n: number }).n >= 5) redirect("/login?error=locked");
+  const n = (await db.prepare("select count(*) filter (where email=@email) email, count(*) filter (where ip=@ip) ip from login_misses").get({ email, ip })) as { email: number; ip: number };
+  if (n.email >= EMAIL_MISSES || n.ip >= IP_MISSES) redirect("/login?error=locked");
   const user = await signIn(email, String(f.get("password") ?? ""));
   if (!user) {
-    await db.prepare("insert into login_misses (t, email) values (?,?)").run(now, email);
+    await db.prepare("insert into login_misses (t, email, ip) values (?,?,?)").run(now, email, ip);
     redirect("/login?error=1");
   }
   await setSession(user.uid, user.workspace, user.tokenV);

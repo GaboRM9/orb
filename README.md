@@ -13,9 +13,9 @@ Set `AUTH_SECRET` in `.env.local` (`openssl rand -base64 32`, see `.env.example`
 npx tsx scripts/user.mts add you@example.com --admin
 ```
 
-Add more people the same way (leave off `--admin` for a member; `--workspace <id>` for another workspace). Add your Anthropic key in Settings (or `ANTHROPIC_API_KEY` in `.env.local`).
+Admins add more people in **Settings → Members** (add, change role, reset a password, remove; a generated password is shown once), or with the same command (leave off `--admin` for a member; `--workspace <id>` for another workspace). An account belongs to one workspace. Add your Anthropic key in Settings (or `ANTHROPIC_API_KEY` in `.env.local`).
 
-**Roles:** admins manage the workspace: API keys, model, Generative UI, MCP connections (add, attach to agents, Always allow), and see every member's runs and approvals in Settings → Activity. Members chat, edit agents (but not their connections), skills and Knowledge, and change their own password. Agents, skills and Knowledge are shared; **chats belong to whoever started them** and only they can see, continue, stop or delete them. Their runs and approvals are theirs too: members see their own Activity, and only the chat's owner decides its approvals. `DAILY_BUDGET_USD` caps the whole workspace. Chats, runs and approvals from before users existed go to the workspace's first member.
+**Roles:** admins manage the workspace: members, API keys, model, Generative UI, MCP connections (add, attach to agents, Always allow), and see every member's runs and approvals in Settings → Activity. Members chat, edit agents (but not their connections), skills and Knowledge, and change their own password. Agents, skills and Knowledge are shared; **chats belong to whoever started them** and only they can see, continue, stop or delete them. Their runs and approvals are theirs too: members see their own Activity, and only the chat's owner decides its approvals. `DAILY_BUDGET_USD` caps the whole workspace. Chats, runs and approvals from before users existed go to the workspace's first member.
 
 ## Deploy on Vercel
 
@@ -45,7 +45,8 @@ flowchart LR
 Each request is one **run**: model, tokens (including cache reads/writes), cost, duration, every tool call and every approve/deny decision are written to the database and shown under Settings → Activity. The loop stops after 25 steps.
 
 - **Stop** really stops: the button flags the thread in the database (`DELETE /api/chat?id=…`) and the running turn, on whichever instance, aborts within half a second and keeps what it has. Closing the tab does *not* stop a run: it finishes and is saved.
-- **Daily budget:** set `DAILY_BUDGET_USD` and new turns are refused (429) once the day's runs cost that much. Costs use list prices in `lib/models.ts`.
+- **Daily budget:** set `DAILY_BUDGET_USD` and new turns are refused (429) once the workspace's runs today cost that much; `USER_DAILY_BUDGET_USD` does the same per member. Costs use list prices in `lib/models.ts`.
+- **Attachments:** images, PDFs and text files (Markdown, CSV… are sent as plain text), up to 3 MB per message, as inline data. The server refuses other types and hosted URLs.
 - **Long threads** are trimmed to ~100k tokens before sending (old tool output first, then the oldest turns); the system prompt, tools and history are prompt-cached.
 
 ## Knowledge (RAG, Library → Knowledge)
@@ -62,7 +63,7 @@ Upload files or a folder, or import a GitHub repo's docs; they appear as a folde
 - **Approval gate:** every `mcp_*` tool, `fetchUrl` and `createSkill` waits for an explicit approve/deny in the chat (`toolApproval` in `app/api/chat/route.ts`). `createSkill` is off unless an agent has "Save new skills" turned on.
 - **SSRF guard:** `fetchUrl` only talks to public http(s) hosts. All resolved addresses are checked (private, loopback, link-local, CGNAT, IPv4-mapped IPv6), redirects are re-validated per hop (max 3), the body is capped at ~64 KB and the request times out at 8 s (`lib/net-safe.ts`).
 - **Untrusted tool output:** the system prompt tells the model that MCP output and knowledge passages are data and never instructions.
-- **Fails closed:** with no `AUTH_SECRET` nobody can sign in. Passwords are scrypt-hashed; 5 misses lock an email for a minute. Sessions are HMAC-signed, 7-day tokens, compared in constant time; server actions re-check membership and role. Changing your password signs out every other device.
+- **Fails closed:** with no `AUTH_SECRET` nobody can sign in. Passwords are scrypt-hashed; 5 misses lock an email for a minute, 20 lock the client IP. Sessions are HMAC-signed, 7-day tokens, compared in constant time; server actions re-check membership and role. Changing your password signs out every other device.
 - **Dead MCP servers don't kill a run:** connections time out after 8 s, the server is skipped and the model is told it was unreachable.
 - **Idempotent approval log:** approvals are stored once and decided once, so the same message can be synced on every turn.
 - **Secrets at rest:** the saved API keys and MCP auth headers are encrypted (AES-256-GCM) with a key derived from `AUTH_SECRET`. (Locally, an older `ADMIN_PASSWORD` is still accepted in its place so existing installs keep working.)

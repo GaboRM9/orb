@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { db, getAgent, getSetting, listMcp, me, requireAdmin, requireAuth, setSetting, ws } from "./db";
+import { addMember, db, getAgent, getSetting, listMcp, me, removeMember, requireAdmin, requireAuth, resetMemberPassword, setMemberRole, setSetting, ws } from "./db";
 import { parseTheme, type Theme } from "./theme";
 import { seal } from "./secret";
 import { importGithub } from "./github";
@@ -246,4 +246,30 @@ export async function revokeMcpTool(serverId: string, toolName: string) {
   await requireAdmin();
   await setMcpAllowed(serverId, toolName, false);
   revalidatePath("/library");
+}
+
+// Settings → Members. Generated passwords come back to the admin once and are never stored in the clear.
+type MemberResult = { ok: boolean; text: string; password?: string };
+const done = (r: { error?: string }, text: string): MemberResult => (r.error ? { ok: false, text: r.error } : (revalidatePath("/settings"), { ok: true, text }));
+
+export async function inviteMember(f: FormData): Promise<MemberResult> {
+  const { workspace } = await requireAdmin();
+  const r = await addMember(workspace, s(f, "email"), s(f, "role") === "admin" ? "admin" : "member");
+  return "error" in r ? { ok: false, text: r.error } : (revalidatePath("/settings"), { ok: true, text: `Added ${s(f, "email")}. Send them this password; it won't be shown again.`, password: r.password });
+}
+
+export async function changeMemberRole(uid: string, role: "admin" | "member"): Promise<MemberResult> {
+  const { workspace } = await requireAdmin();
+  return done(await setMemberRole(workspace, uid, role === "admin" ? "admin" : "member"), "Role changed.");
+}
+
+export async function dropMember(uid: string): Promise<MemberResult> {
+  const { workspace } = await requireAdmin();
+  return done(await removeMember(workspace, uid), "Removed.");
+}
+
+export async function resetPassword(uid: string): Promise<MemberResult> {
+  const { workspace } = await requireAdmin();
+  const r = await resetMemberPassword(workspace, uid);
+  return "error" in r ? { ok: false, text: r.error } : { ok: true, text: "New password set and their sessions signed out. Send it to them; it won't be shown again.", password: r.password };
 }

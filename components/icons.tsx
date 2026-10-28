@@ -15,6 +15,7 @@ export const BookIcon = svg(<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path 
 export const PlusIcon = svg(<path d="M12 5v14M5 12h14" />);
 export const ArrowUpIcon = svg(<path d="M12 19V5M5 12l7-7 7 7" />);
 export const StopIcon = svg(<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />);
+export const PaperclipIcon = svg(<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" />);
 export const XIcon = svg(<path d="M18 6 6 18M6 6l12 12" />);
 export const MenuIcon = svg(<path d="M4 6h16M4 12h16M4 18h16" />);
 // the logo: a plain ring, the "o" of orb. Decorative unless given a label.
