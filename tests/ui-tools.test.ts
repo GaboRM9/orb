@@ -36,3 +36,33 @@ describe("answer formats", () => {
     assert.ok(!("showCards" in uiTools));
   });
 });
+
+describe("clipOverlong", () => {
+  const repair = async (toolName: string, input: unknown) => {
+    const { clipOverlong } = await import("../lib/ui-tools");
+    const { InvalidToolInputError } = await import("ai");
+    const toolCall = { type: "tool-call" as const, toolCallId: "t1", toolName, input: JSON.stringify(input) };
+    const error = new InvalidToolInputError({ toolName, toolInput: toolCall.input, cause: null });
+    return clipOverlong({ toolCall, error, tools: {}, messages: [], instructions: undefined, system: undefined, inputSchema: async () => ({}) });
+  };
+  const options = (fact: string) => ({
+    question: "Which flight route to Spain from Toronto?",
+    options: [{ title: "Nonstop", facts: [fact] }, { title: "One stop", facts: ["Often cheaper"] }],
+    actions: [],
+  });
+
+  it("clips the fact that made the model redo a whole answer (and the chat draw it twice)", async () => {
+    const fixed = await repair("answerOptions", options("Common hubs: Paris, Frankfurt, Amsterdam, Lisbon"));
+    const fact = JSON.parse(fixed!.input).options[0].facts[0] as string;
+    assert.equal(fact.length, 40);
+    assert.ok(fact.startsWith("Common hubs: Paris") && fact.endsWith("…"));
+  });
+  it("trims a list that's too long", async () => {
+    const fixed = await repair("answerOptions", { ...options("ok"), actions: Array(5).fill({ label: "Go", prompt: "go" }) });
+    assert.equal(JSON.parse(fixed!.input).actions.length, 3);
+  });
+  it("leaves any other mistake, and other tools, to fail as before", async () => {
+    assert.equal(await repair("answerOptions", { question: "q", options: [{ title: "only one", facts: ["x"] }], actions: [] }), null); // too few options
+    assert.equal(await repair("createSkill", { name: "x".repeat(500) }), null);
+  });
+});

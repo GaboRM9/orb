@@ -15,6 +15,13 @@ const Title = ({ children }: { children?: string }) => (children ? <div classNam
 
 /** Returns a component for known UI-tool parts, or null so the caller falls back to the generic card. */
 export function renderUiPart(p: Part, ctx: UiCtx) {
+  const ui = drawUiPart(p, ctx);
+  // a UI call that failed validation is retried by the model: drawing the failed attempt too shows the card twice.
+  // Surfaces keep their "Couldn't open" note: theirs is a data error the user should see.
+  return ui && isToolUIPart(p) && p.state === "output-error" && !getToolName(p).startsWith("open") ? <></> : ui;
+}
+
+function drawUiPart(p: Part, ctx: UiCtx) {
   const { addOutput } = ctx;
   // surfaces (lib/surfaces) open with open({ t }) (older chats: open_<surface>); they aren't in ChatMessage's types, so match by name
   const name = isToolUIPart(p) ? getToolName(p) : "";

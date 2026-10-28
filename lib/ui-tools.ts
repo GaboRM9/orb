@@ -1,4 +1,4 @@
-import { tool } from "ai";
+import { InvalidToolInputError, tool, type ToolCallRepairFunction, type ToolSet } from "ai";
 import { z } from "zod";
 
 // Render tools: the model fills the schema, execute echoes it back, the client draws a component.
@@ -106,6 +106,34 @@ export const retiredUiTools = {
     }),
     execute: echo,
   }),
+};
+
+/**
+ * repairToolCall for the UI tools: a call that only broke a length limit (a 48-character fact where 40 fit) is clipped
+ * to fit instead of failing, which would make the model write the whole answer again. Anything else fails as before.
+ */
+export const clipOverlong: ToolCallRepairFunction<ToolSet> = async ({ toolCall, error }) => {
+  const schema = (uiTools as Record<string, { inputSchema: unknown }>)[toolCall.toolName]?.inputSchema;
+  if (!InvalidToolInputError.isInstance(error) || !(schema instanceof z.ZodType)) return null;
+  let input: unknown;
+  try {
+    input = JSON.parse(toolCall.input);
+  } catch {
+    return null;
+  }
+  const bad = schema.safeParse(input);
+  if (bad.success) return null;
+  for (const issue of bad.error.issues) {
+    if (issue.code !== "too_big" || !issue.path.length) return null;
+    const parent = issue.path.slice(0, -1).reduce<unknown>((o, k) => (o as Record<PropertyKey, unknown>)?.[k], input) as Record<PropertyKey, unknown> | undefined;
+    const key = issue.path.at(-1)!;
+    const v = parent?.[key];
+    const max = Number(issue.maximum);
+    if (typeof v === "string") parent![key] = `${v.slice(0, max - 1).trimEnd()}…`;
+    else if (Array.isArray(v)) parent![key] = v.slice(0, max);
+    else return null;
+  }
+  return schema.safeParse(input).success ? { ...toolCall, input: JSON.stringify(input) } : null;
 };
 
 /** What the open surfaces show right now, sent by the browser with each message. It's user-side state, so it is capped and framed as data. */

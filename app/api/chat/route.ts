@@ -10,7 +10,7 @@ import { open } from "@/lib/secret";
 import { logRun, requestStop, spentToday, stopRequested, syncApprovals, type LoggedCall } from "@/lib/runs";
 import { legacySurfaceTools } from "@/lib/surfaces";
 import { activeTools, APPROVAL_TOOLS, genUiTools } from "@/lib/tools";
-import { surfaceContext, UI_HINT } from "@/lib/ui-tools";
+import { clipOverlong, surfaceContext, UI_HINT } from "@/lib/ui-tools";
 
 export const maxDuration = 300; // agent runs with several tool calls outlast the old 60s
 const CACHE = { anthropic: { cacheControl: { type: "ephemeral" } } } as const;
@@ -100,6 +100,7 @@ export async function POST(req: Request) {
     messages: history,
     tools,
     stopWhen: isStepCount(MAX_STEPS),
+    repairToolCall: clipOverlong,
     abortSignal: stopper.signal, // only the Stop button aborts; a closed tab lets the turn finish
     // external and outbound-network tools can have side effects: the user approves each call in the chat
     // an MCP tool the user chose to always allow (Library) is approved automatically, which still logs it as an approval
