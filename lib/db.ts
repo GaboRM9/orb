@@ -224,6 +224,16 @@ export async function signIn(email: string, password: string) {
   const ok = checkPassword(password, u?.pass_hash ?? (dummy ??= hashPassword("")));
   return u && ok ? { uid: u.id, workspace: u.workspace_id, tokenV: u.token_v } : null;
 }
+/**
+ * Replaces the password if `current` matches, and bumps token_v so every session (on every device) is signed out.
+ * Returns the new token_v, or null when the current password is wrong.
+ */
+export async function changePassword(uid: string, current: string, next: string) {
+  const u = (await db.prepare("select pass_hash from users where id=?").get(uid)) as { pass_hash: string } | undefined;
+  if (!u || !checkPassword(current, u.pass_hash)) return null;
+  const r = (await db.prepare("update users set pass_hash=?, token_v=token_v+1 where id=? returning token_v").get(hashPassword(next), uid)) as { token_v: number };
+  return r.token_v;
+}
 export const hasUsers = async () => !!(await db.prepare("select 1 from users limit 1").get());
 
 /** The workspace every query is scoped to: an inWorkspace() scope, else the signed-in session's. Otherwise it throws, so a query can never fall back to another org's rows. */
