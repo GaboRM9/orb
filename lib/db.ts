@@ -232,14 +232,19 @@ export async function changePassword(uid: string, current: string, next: string)
   const u = (await db.prepare("select pass_hash from users where id=?").get(uid)) as { pass_hash: string } | undefined;
   if (!u || !checkPassword(current, u.pass_hash)) return null;
   const r = (await db.prepare("update users set pass_hash=?, token_v=token_v+1 where id=? returning token_v").get(hashPassword(next), uid)) as { token_v: number };
+  checked.clear(); // this instance drops old sessions now; others within the 10s memo
   return r.token_v;
 }
 export const hasUsers = async () => !!(await db.prepare("select 1 from users limit 1").get());
 
-/** The workspace every query is scoped to: an inWorkspace() scope, else the signed-in session's. Otherwise it throws, so a query can never fall back to another org's rows. */
+/**
+ * The workspace every query is scoped to: an inWorkspace() scope, else the signed-in session's. A request whose session
+ * is no longer valid (signed out elsewhere, removed from the workspace) goes to /login; outside a request it throws.
+ * Either way a query never falls back to another org's rows.
+ */
 export async function ws() {
   const w = scope.getStore() ?? (await session())?.workspace;
-  if (!w) throw new Error("No workspace: not signed in");
+  if (!w) redirect("/login");
   return w;
 }
 
