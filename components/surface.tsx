@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { views } from "./surfaces";
+import { views, WIDTH } from "./surfaces";
 
 export type SurfaceResult = { params: unknown; data: unknown; summary: string };
 export type SurfaceViewProps<P = never, D = never> = {
@@ -40,10 +40,11 @@ export function SurfaceFrame({ name, result, live, send, setContext }: { name: s
   };
 
   return (
-    <div className="card overflow-hidden !p-0">
-      <div className="flex items-baseline justify-between gap-3 border-b border-line px-4 py-2.5 text-xs">
-        <span className="font-medium">{v?.title ?? name}</span>
-        <span className="truncate text-mute" aria-live="polite">{busy ? "Updating…" : state.summary}</span>
+    <div className={`card w-full min-w-0 overflow-hidden !p-0 ${WIDTH[v?.width ?? "full"]}`}>
+      {/* the summary sits beside the title when there's room, under it in a narrow card */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-line px-4 py-2.5 text-xs">
+        <span className="shrink-0 font-medium">{v?.title ?? name}</span>
+        <span className="line-clamp-2 min-w-0 text-mute" aria-live="polite" title={state.summary}>{busy ? "Updating…" : state.summary}</span>
       </div>
       <div className={`transition-opacity ${busy ? "opacity-60" : ""}`}>
         {v ? (

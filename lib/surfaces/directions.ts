@@ -17,7 +17,7 @@ export type DirectionsData = {
   steps: { text: string; distanceM: number }[];
 };
 
-const get = async (url: string) => {
+export const get = async (url: string) => {
   const r = await fetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error(`${new URL(url).host} answered ${r.status}`);
   return r.json();
@@ -28,7 +28,7 @@ const get = async (url: string) => {
 const places = new Map<string, Promise<Place>>();
 const MAX_PLACES = 500;
 let nextSlot = 0;
-const nominatimTurn = () => {
+export const nominatimTurn = () => {
   const now = Date.now();
   const wait = Math.max(0, nextSlot - now);
   nextSlot = Math.max(now, nextSlot) + 1000; // claim the next free second before waiting, so concurrent calls queue up
@@ -66,7 +66,7 @@ export function stepText({ name, maneuver: { type, modifier } }: OsrmStep) {
 export const directions = defineSurface({
   name: "directions",
   title: "Directions",
-  when: "the user wants to get somewhere, or asks how far or how long it takes between two places",
+  when: "getting somewhere, or how far or long between two places; name places as specifically as you can, with the city; mode from the question",
   params: z.object({
     from: z.string().min(2).max(120).describe("start: an address or place name, as specific as you can (include the city)"),
     to: z.string().min(2).max(120).describe("destination, same rules"),

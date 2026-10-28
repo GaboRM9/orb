@@ -74,6 +74,7 @@ h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
 .route-map { background: var(--surface); font-family: inherit; }
 .route-map .route-line { stroke: var(--accent); }
 .route-map .route-dot { stroke: var(--accent); fill: var(--bg); fill-opacity: 1; }
+.route-map .place-dot { stroke: var(--accent); fill: var(--accent); }
 .route-map .leaflet-control-attribution { background: var(--glass); color: var(--mute); font-size: 10px; }
 .route-map .leaflet-control-attribution a { color: inherit; }
 [data-mode="dark"] .route-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) grayscale(0.4); }
@@ -97,6 +98,9 @@ h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
   .seg { @apply inline-flex gap-1 rounded-ctl bg-surface-2 p-1; }
   .seg > a, .seg > button { @apply rounded-ctl px-4 py-1.5 text-sm text-mute transition-colors hover:text-fg; }
   .seg > [aria-current="page"], .seg > [aria-pressed="true"] { @apply bg-bg text-fg shadow-sm; }
+  .act { @apply rounded-ctl border border-line px-3 py-1 text-xs text-mute transition-colors hover:bg-hover hover:text-fg disabled:opacity-40; }
+  .act[aria-pressed="true"] { @apply bg-surface-2 text-fg; }
+  .act-ask { @apply border-accent text-fg; }
   .btn { @apply rounded-ctl border border-line px-4 py-2 text-sm transition-colors hover:bg-hover disabled:opacity-40; }
   .btn-solid { @apply rounded-ctl border border-accent bg-accent px-4 py-2 text-sm text-on-accent transition-opacity hover:opacity-85 disabled:opacity-40; }
 }
