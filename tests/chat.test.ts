@@ -47,7 +47,9 @@ const call = (id: string, toolCallId: string, extra: object = {}): UIMessage =>
   ({ id, role: "assistant", parts: [{ type: "tool-askUser", toolCallId, state: "input-available", input: {}, ...extra }] }) as UIMessage;
 
 /* eslint-disable-next-line @typescript-eslint/no-require-imports */
-(require("../lib/db") as typeof import("../lib/db")).workspaceScope.enterWith("default"); // these tests run as the first workspace
+const scopes = require("../lib/db") as typeof import("../lib/db");
+scopes.workspaceScope.enterWith("default"); // these tests run as the first workspace
+scopes.userScope.enterWith("u1"); // and as the user the session tokens below name
 let store: typeof import("../lib/chat-store");
 let dbm: typeof import("../lib/db");
 let runs: typeof import("../lib/runs");
@@ -138,12 +140,12 @@ describe("approval log", () => {
   it("records a request once, then applies the decision once", async () => {
     await runs.syncApprovals("r1", "th", "ada", part({ id: "ap1" }));
     await runs.syncApprovals("r1", "th", "ada", part({ id: "ap1" })); // same message synced twice
-    assert.equal((await runs.listApprovals()).filter((a) => a.approval_id === "ap1").length, 1);
-    assert.equal((await runs.listApprovals(undefined, "pending")).length, 1);
+    assert.equal((await runs.listApprovals("u1")).filter((a) => a.approval_id === "ap1").length, 1);
+    assert.equal((await runs.listApprovals("u1", undefined, "pending")).length, 1);
 
     await runs.syncApprovals("r2", "th", "ada", part({ id: "ap1", approved: false, reason: "no" }));
     await runs.syncApprovals("r3", "th", "ada", part({ id: "ap1", approved: true })); // a later flip must not rewrite history
-    const row = (await runs.listApprovals()).find((a) => a.approval_id === "ap1")!;
+    const row = (await runs.listApprovals("u1")).find((a) => a.approval_id === "ap1")!;
     assert.equal(row.decision, "denied");
     assert.equal(row.decided_run, "r2");
     assert.equal(row.tool, "fetchUrl");
@@ -153,12 +155,12 @@ describe("approval log", () => {
 describe("run summary", () => {
   const run = (id: string, started: number, status: "ok" | "error") => runs.logRun({ id, threadId: "th", model: "m", started, status, calls: [] });
   it("counts today's runs and errors, skips older ones, and counts pending approvals", async () => {
-    const base = await runs.runSummary();
+    const base = await runs.runSummary("u1");
     run("s1", Date.now(), "ok");
     run("s2", Date.now(), "error");
     run("s3", Date.now() - 2 * 86_400_000, "error"); // two days ago: not "today"
     await runs.syncApprovals("s1", "th", "ada", { id: "m", role: "assistant", parts: [{ type: "tool-fetchUrl", input: { url: "https://example.com" }, approval: { id: "ap-summary" } }] } as unknown as UIMessage);
-    const now = await runs.runSummary();
+    const now = await runs.runSummary("u1");
     assert.equal(now.runs - base.runs, 2);
     assert.equal(now.errors - base.errors, 1);
     assert.equal(now.pending - base.pending, 1);

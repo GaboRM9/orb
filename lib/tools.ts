@@ -1,6 +1,6 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { db, listSkills, ws } from "./db";
+import { db, listSkills, me, ws } from "./db";
 import { search } from "./knowledge";
 import { safeFetchText } from "./net-safe";
 import { uiTools } from "./ui-tools";
@@ -35,7 +35,7 @@ export const allTools = {
     description: "Search the titles of the user's saved chat threads.",
     inputSchema: z.object({ query: z.string() }),
     execute: async ({ query }) =>
-      db.prepare("select id,title from threads where workspace_id=? and title like ? limit 10").all(await ws(), `%${query}%`),
+      db.prepare("select id,title from threads where workspace_id=? and user_id=? and title like ? limit 10").all(await ws(), await me(), `%${query}%`),
   }),
   createSkill: tool({
     description: "Save a reusable skill: a kebab-case name, when to use it, step-by-step instructions, and the tools it needs. The user approves before it is saved.",

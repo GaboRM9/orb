@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { after } from "next/server";
 import { consumeStream, convertToModelMessages, createIdGenerator, createUIMessageStreamResponse, generateId, isStepCount, streamText, toUIMessageStream, type SystemModelMessage, type UIMessage } from "ai";
-import { envKey, getAgent, getSetting, inWorkspace, requestSession, threadAgentId } from "@/lib/db";
+import { asUser, envKey, getAgent, getSetting, inWorkspace, requestSession, threadAgentId } from "@/lib/db";
 import { fitContext, loadChat, mergeMessage, saveChat } from "@/lib/chat-store";
 import { addUsage, DEFAULT_MODEL, type Usage } from "@/lib/models";
 import { allowedMcp, MCP_PREFIX, mcpApproval, openMcp } from "@/lib/mcp";
@@ -21,17 +21,17 @@ export async function POST(req: Request) {
   const session = await requestSession(req);
   if (!session) return new Response("Unauthorized", { status: 401 });
   const { id, message, agentId, context }: { id: string; message: UIMessage; agentId?: string; context?: unknown } = await req.json();
-  // callbacks below can run after the response ends, outside the request: they get the workspace explicitly
-  const w = session.workspace;
-  const scoped = <T,>(fn: () => Promise<T>) => inWorkspace(w, fn);
+  // callbacks below can run after the response ends, outside the request: they get the workspace and user explicitly
+  const { workspace: w, uid } = session;
+  const scoped = <T,>(fn: () => T) => inWorkspace(w, () => asUser(uid, fn));
   const apiKey = open(await getSetting("api_key")) || (await envKey("ANTHROPIC_API_KEY"));
   if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
   const budget = Number(process.env.DAILY_BUDGET_USD) || 0;
   if (budget && (await spentToday()) >= budget)
     return new Response(`Today's budget of $${budget} is used up. It resets at midnight.`, { status: 429 });
 
-  const messages = mergeMessage(await loadChat(id), message);
-  const agent = await getAgent((await threadAgentId(id)) ?? agentId); // a thread keeps the agent it started with
+  const messages = mergeMessage(await scoped(() => loadChat(id)), message);
+  const agent = await getAgent((await scoped(() => threadAgentId(id))) ?? agentId); // a thread keeps the agent it started with
   const genUi = (await getSetting("gen_ui", "on")) !== "off"; // beta switch in Settings: off means plain-text answers
   const { tools, skills } = await activeTools(agent && { tools: JSON.parse(agent.tools_json), skills: JSON.parse(agent.skills_json) }, genUi);
   const mcp = await openMcp(agent ? JSON.parse(agent.mcp_json) : []);
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     }));
   };
 
-  const result = streamText({
+  const result = scoped(() => streamText({
     model: createAnthropic({ apiKey })(model),
     instructions,
     messages: history,
@@ -100,7 +100,7 @@ export async function POST(req: Request) {
     onEnd: () => track(finish("ok")),
     onError: ({ error }) => void track(finish("error", error)),
     onAbort: () => void track(finish("aborted")),
-  });
+  })); // tools run as this user too (searchThreads)
 
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({
@@ -119,9 +119,10 @@ export async function POST(req: Request) {
 
 /** Stop button: flags the thread; its running turn sees the flag within STOP_POLL_MS and aborts, keeping what it has so far. */
 export async function DELETE(req: Request) {
-  if (!(await requestSession(req))) return new Response("Unauthorized", { status: 401 });
+  const session = await requestSession(req);
+  if (!session) return new Response("Unauthorized", { status: 401 });
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return new Response("Missing id", { status: 400 });
-  await requestStop(id);
+  await inWorkspace(session.workspace, () => asUser(session.uid, () => requestStop(id)));
   return new Response(null, { status: 204 });
 }

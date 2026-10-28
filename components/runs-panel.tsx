@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listAgents } from "@/lib/db";
-import { listApprovals, listRuns, runSummary } from "@/lib/runs";
+import { activityOf, listApprovals, listRuns, runSummary } from "@/lib/runs";
 
 const fmt = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
 const pill = (on: boolean) => `chip !px-3 ${on ? "border-accent bg-accent text-on-accent" : "border-line text-mute hover:text-fg"}`;
@@ -11,7 +11,7 @@ export async function RunsPanel({ view, agent, status }: { view?: string; agent?
   const href = (o: { view?: string; agent?: string; status?: string }) =>
     `/settings?${new URLSearchParams({ tab: "runs", ...(o.view && { view: o.view }), ...(o.agent && { agent: o.agent }), ...(o.status && { status: o.status }) })}`;
   const statuses = approvals ? ["pending", "approved", "denied"] : ["ok", "error", "aborted"];
-  const s = await runSummary();
+  const s = await runSummary(await activityOf());
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line">
@@ -42,7 +42,7 @@ export async function RunsPanel({ view, agent, status }: { view?: string; agent?
 }
 
 async function RunsTable({ agent, status }: { agent?: string; status?: string }) {
-  const runs = await listRuns(agent, status);
+  const runs = await listRuns(await activityOf(), agent, status);
   if (!runs.length) return <p className="text-sm text-mute">No runs yet. Chat with an agent and they will appear here.</p>;
   return (
     <div className="overflow-x-auto">
@@ -67,7 +67,7 @@ async function RunsTable({ agent, status }: { agent?: string; status?: string })
 }
 
 async function ApprovalsTable({ agent, status }: { agent?: string; status?: string }) {
-  const rows = await listApprovals(agent, status);
+  const rows = await listApprovals(await activityOf(), agent, status);
   if (!rows.length) return <p className="text-sm text-mute">No approvals yet. They appear when an agent asks to use an MCP tool or fetchUrl.</p>;
   return (
     <div className="overflow-x-auto">

@@ -1,18 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { db, ws, type Run, type ToolCall } from "@/lib/db";
-import { approvalsForRun } from "@/lib/runs";
+import { db, me, ws, type Run, type ToolCall } from "@/lib/db";
+import { activityOf, approvalsForRun } from "@/lib/runs";
 
 export const dynamic = "force-dynamic";
 
 export default async function RunDetail({ params }: PageProps<"/settings/runs/[id]">) {
   const { id } = await params;
-  const w = await ws();
-  const run = (await db.prepare("select r.*, a.name agent from runs r left join agents a on a.id=r.agent_id where r.id=? and r.workspace_id=?").get(id, w)) as Run | undefined;
+  const [w, user] = [await ws(), await activityOf()];
+  const run = (await db.prepare("select r.*, a.name agent from runs r left join agents a on a.id=r.agent_id where r.id=? and r.workspace_id=? and (? is null or r.user_id=?)").get(id, w, user, user)) as Run | undefined;
   if (!run) notFound();
   const calls = (await db.prepare("select * from tool_calls where run_id=? order by id").all(id)) as ToolCall[];
-  const approvals = await approvalsForRun(id);
-  const threadExists = !!(await db.prepare("select 1 from threads where id=? and workspace_id=?").get(run.thread_id, w));
+  const approvals = await approvalsForRun(user, id);
+  const thread = (await db.prepare("select user_id from threads where id=? and workspace_id=?").get(run.thread_id, w)) as { user_id: string } | undefined;
   const facts = [
     ["Agent", run.agent ?? "—"], ["Model", run.model], ["Started", new Date(run.started).toLocaleString()],
     ["Duration", `${run.ms}ms`], ["Tokens in", String(run.input_tokens ?? "—")], ["Tokens out", String(run.output_tokens ?? "—")], ["Status", run.status],
@@ -25,8 +25,10 @@ export default async function RunDetail({ params }: PageProps<"/settings/runs/[i
         {facts.map(([k, v]) => <div key={k}><dt className="text-xs text-mute">{k}</dt><dd className="font-mono text-xs">{v}</dd></div>)}
       </dl>
       {run.error && <pre className="whitespace-pre-wrap rounded-lg border border-fg p-4 font-mono text-xs">{run.error}</pre>}
-      {threadExists ? (
+      {thread?.user_id === (await me()) ? (
         <Link href={`/chat/${run.thread_id}`} className="btn inline-block text-xs">Open conversation</Link>
+      ) : thread ? (
+        <p className="text-xs text-mute">This conversation belongs to another member.</p>
       ) : (
         <p className="text-xs text-mute">The conversation was deleted. This record is kept for audit.</p>
       )}

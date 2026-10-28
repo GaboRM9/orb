@@ -1,7 +1,7 @@
 import { loadChat } from "@/lib/chat-store";
 import { Chat } from "@/components/chat";
 import type { ChatMessage } from "@/components/gen-ui";
-import { getAgent, listAgents, threadAgentId } from "@/lib/db";
+import { getAgent, isAdmin, listAgents, threadAgentId } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,7 @@ export default async function Page({ params, searchParams }: PageProps<"/chat/[i
       id={id}
       initialMessages={messages}
       agent={agent && { id: agent.id, name: agent.name, description: agent.description }}
+      canAlwaysAllow={await isAdmin()}
     />
   );
 }

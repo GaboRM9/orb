@@ -1,6 +1,6 @@
 import { generateId } from "ai";
 import { notFound, redirect } from "next/navigation";
-import { db, getAgent, ws } from "@/lib/db";
+import { db, getAgent, me, ws } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +8,6 @@ export const dynamic = "force-dynamic";
 export default async function OpenAgent({ params }: PageProps<"/agents/[id]">) {
   const { id } = await params;
   if (!(await getAgent(id))) notFound();
-  const last = (await db.prepare("select id from threads where agent_id=? and workspace_id=? order by updated desc limit 1").get(id, await ws())) as { id: string } | undefined;
+  const last = (await db.prepare("select id from threads where agent_id=? and workspace_id=? and user_id=? order by updated desc limit 1").get(id, await ws(), await me())) as { id: string } | undefined;
   redirect(last ? `/chat/${last.id}` : `/chat/${generateId()}?agent=${id}`);
 }

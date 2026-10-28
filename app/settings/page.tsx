@@ -4,7 +4,7 @@ import { MIN_PASSWORD } from "@/lib/auth";
 import { clearKey, clearOpenAIKey, clearThreads, saveGenUi, saveSettings, saveTheme } from "@/lib/actions";
 import { parseTheme } from "@/lib/theme";
 import { RunsPanel } from "@/components/runs-panel";
-import { getSetting } from "@/lib/db";
+import { getSetting, isAdmin } from "@/lib/db";
 import { DEFAULT_MODEL, MODELS } from "@/lib/models";
 
 export const dynamic = "force-dynamic";
@@ -35,8 +35,10 @@ async function AI({ password }: { password?: string }) {
   const model = await getSetting("model", DEFAULT_MODEL);
   const theme = parseTheme(await getSetting("theme", "{}"));
   const genUi = (await getSetting("gen_ui", "on")) !== "off";
+  const admin = await isAdmin();
   return (
     <div className="space-y-6">
+      {admin ? (<>
       <form action={saveSettings} className="space-y-4">
         <label className="block space-y-1 text-sm">
           <span>Anthropic API key {hasKey ? <span className="text-mute">(saved — leave blank to keep)</span> : <span className="text-mute">(or set ANTHROPIC_API_KEY)</span>}</span>
@@ -58,7 +60,7 @@ async function AI({ password }: { password?: string }) {
           {hasOpenAI && <button className="btn" formAction={clearOpenAIKey}>Remove OpenAI key</button>}
         </div>
       </form>
-      <p className="text-xs text-mute">The key is encrypted in data/app.db with AUTH_SECRET (or ADMIN_PASSWORD). Change that secret and you will need to re-enter it.</p>
+      <p className="text-xs text-mute">The keys are encrypted in the database with AUTH_SECRET. Change that secret and you will need to re-enter them.</p>
       <form action={saveGenUi} className="flex items-center justify-between gap-4 text-sm">
         <span>
           Generative UI <span className="chip ml-1 border-accent">Beta</span>
@@ -70,6 +72,9 @@ async function AI({ password }: { password?: string }) {
           ))}
         </div>
       </form>
+      </>) : (
+        <p className="text-sm text-mute">Model: {model}. API keys, Generative UI and connections are managed by a workspace admin.</p>
+      )}
       <form action={saveTheme} className="flex items-center justify-between text-sm">
         <span>Appearance</span>
         <div className="seg">
@@ -78,7 +83,7 @@ async function AI({ password }: { password?: string }) {
           ))}
         </div>
       </form>
-      <Account password={password} />
+      <Account password={password} admin={admin} />
     </div>
   );
 }
@@ -90,7 +95,7 @@ const PASSWORD_MESSAGES: Record<string, string> = {
   mismatch: "The new passwords don't match.",
 };
 
-function Account({ password }: { password?: string }) {
+function Account({ password, admin }: { password?: string; admin: boolean }) {
   return (
     <div className="space-y-4 border-t border-line pt-6">
       <details className="text-sm" open={!!password}>
@@ -108,7 +113,7 @@ function Account({ password }: { password?: string }) {
       <details className="relative">
         <summary className="btn cursor-pointer list-none [&::-webkit-details-marker]:hidden">Delete all chats</summary>
         <form action={clearThreads} className="absolute left-0 z-10 mt-2 w-56 space-y-2 rounded-md border border-line glass p-3 shadow-lg text-sm">
-          <p className="text-mute">Every conversation is deleted. Runs are kept.</p>
+          <p className="text-mute">Every conversation of yours is deleted. Runs are kept.</p>
           <button className="btn-solid">Yes, delete all</button>
         </form>
       </details>

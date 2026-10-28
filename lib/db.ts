@@ -115,6 +115,9 @@ async function init() {
     ["approvals", "workspace_id", "text not null default 'default'"],
     ["stops", "workspace_id", "text not null default 'default'"],
     ["login_misses", "email", "text"],
+    ["threads", "user_id", "text"],
+    ["runs", "user_id", "text"],
+    ["approvals", "user_id", "text"],
   ])
     if (!(await cols(table)).includes(col)) await c.execute(`alter table ${table} add column ${col} ${ddl}`).catch(() => {}); // lost a race: the column exists now
   // single-tenant databases: rebuild with workspace-scoped unique keys; every existing row lands in the first workspace.
@@ -131,7 +134,17 @@ async function init() {
     create index if not exists runs_ws on runs(workspace_id, started desc);
     create index if not exists approvals_ws on approvals(workspace_id, decision);
     create index if not exists agents_ws on agents(workspace_id);
+    create index if not exists threads_user on threads(workspace_id, user_id, updated desc);
+    create index if not exists runs_user on runs(workspace_id, user_id, started desc);
+    create index if not exists approvals_user on approvals(workspace_id, user_id, decision);
   `);
+  // chats from before ownership go to the workspace's first member (its original owner); a workspace without members yet is
+  // retried on the next start
+  const first = (t: string) => `(select m.user_id from members m where m.workspace_id=${t}.workspace_id order by m.rowid limit 1)`;
+  await c.execute(`update threads set user_id=${first("threads")} where user_id is null`);
+  // runs and approvals follow their chat's owner; a deleted chat's go to the first member too
+  for (const t of ["runs", "approvals"])
+    await c.execute(`update ${t} set user_id=coalesce((select th.user_id from threads th where th.id=${t}.thread_id), ${first(t)}) where user_id is null`);
   await c.execute({ sql: "insert or ignore into workspaces (id, name, created) values ('default', 'Default', ?)", args: [Date.now()] });
   // encrypt credentials saved before encryption existed
   for (const r of (await all(c, "select key, value from settings where key in ('api_key','openai_key')", [])) as { key: string; value: string }[])
@@ -183,6 +196,10 @@ const scope = new AsyncLocalStorage<string>();
 /** Runs `fn` as workspace `id`: background jobs and tests, which have no request to read a session from. */
 export const inWorkspace = <T,>(id: string, fn: () => T) => scope.run(id, fn);
 export const workspaceScope = scope;
+const users = new AsyncLocalStorage<string>();
+/** Runs `fn` as user `uid`, for the same reasons as inWorkspace(). */
+export const asUser = <T,>(uid: string, fn: () => T) => users.run(uid, fn);
+export const userScope = users;
 
 export type Session = { uid: string; workspace: string; role: "admin" | "member" };
 const checked = new Map<string, { s: Session | null; at: number }>();
@@ -214,6 +231,13 @@ export async function requireAuth() {
   if (!s) redirect("/login");
   return s;
 }
+/** Workspace-wide config (API keys, model, MCP servers and their trust, deleting every chat) is for admins. */
+export async function requireAdmin() {
+  const s = await requireAuth();
+  if (s.role !== "admin") throw new Error("Only a workspace admin can change this.");
+  return s;
+}
+export const isAdmin = async () => (await session())?.role === "admin";
 
 let dummy: string | undefined;
 /** The user and their first workspace if the password matches. Unknown emails cost the same scrypt, so timing doesn't reveal who has an account. */
@@ -248,6 +272,13 @@ export async function ws() {
   return w;
 }
 
+/** The user every chat query is scoped to: chats belong to whoever started them. Same fallbacks as ws(). */
+export async function me() {
+  const u = users.getStore() ?? (await session())?.uid;
+  if (!u) redirect("/login");
+  return u;
+}
+
 /** The env API keys are the owner's: only the first workspace may fall back to them; other orgs bring their own. */
 export const envKey = async (name: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY") => ((await ws()) === DEFAULT_WS ? process.env[name] : undefined);
 
@@ -260,13 +291,13 @@ export type Thread = { id: string; title: string; updated: number };
 type Skill = { id: number; name: string; description: string; body: string; enabled: number; tools_json: string; source: "user" | "agent" };
 export type Agent = { id: string; name: string; description: string; instructions: string; model: string; tools_json: string; skills_json: string; mcp_json: string };
 export const listThreads = async () =>
-  (await db.prepare("select id, title, updated from threads where workspace_id=? order by updated desc").all(await ws())) as Thread[];
+  (await db.prepare("select id, title, updated from threads where workspace_id=? and user_id=? order by updated desc").all(await ws(), await me())) as Thread[];
 export const listSkills = async () => (await db.prepare("select * from skills where workspace_id=? order by name").all(await ws())) as Skill[];
 export const listAgents = async () => (await db.prepare("select * from agents where workspace_id=? order by name").all(await ws())) as Agent[];
 export const getAgent = async (id: string | null | undefined) =>
   id ? ((await db.prepare("select * from agents where id=? and workspace_id=?").get(id, await ws())) as Agent | undefined) : undefined;
 export const threadAgentId = async (threadId: string) =>
-  ((await db.prepare("select agent_id from threads where id=? and workspace_id=?").get(threadId, await ws())) as { agent_id: string | null } | undefined)?.agent_id ?? null;
+  ((await db.prepare("select agent_id from threads where id=? and workspace_id=? and user_id=?").get(threadId, await ws(), await me())) as { agent_id: string | null } | undefined)?.agent_id ?? null;
 
 export type McpServer = { id: string; name: string; url: string; headers_json: string; enabled: number };
 export const listMcp = async () => (await db.prepare("select * from mcp_servers where workspace_id=? order by name").all(await ws())) as McpServer[];

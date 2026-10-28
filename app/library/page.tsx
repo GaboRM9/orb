@@ -3,7 +3,7 @@ import { attachMcp, deleteKnowledgeDoc, deleteKnowledgeFolder, deleteMcp, revoke
 import { GithubImport, KnowledgeUpload } from "@/components/knowledge-upload";
 import { McpTest } from "@/components/mcp-test";
 import { hasEmbeddingKey, listDocs, staleChunks, type Doc } from "@/lib/knowledge";
-import { listAgents, listMcp, listSkills, type McpServer } from "@/lib/db";
+import { isAdmin, listAgents, listMcp, listSkills, type McpServer } from "@/lib/db";
 import { allowedMcp, mcpToolName } from "@/lib/mcp";
 import { toolInfo, toolNames } from "@/lib/tools";
 
@@ -145,12 +145,12 @@ async function Skills({ skill, isNew }: { skill?: string; isNew?: string }) {
 }
 
 async function Connections() {
-  const [servers, agents, allowed] = await Promise.all([listMcp(), listAgents(), allowedMcp()]);
+  const [servers, agents, allowed, admin] = await Promise.all([listMcp(), listAgents(), allowedMcp(), isAdmin()]);
   return (
     <div className="space-y-3">
       <p className="text-xs text-mute">
         Remote tool servers (Streamable HTTP). A server does nothing until it&apos;s attached to an agent. Every call to its tools asks for your approval in the chat, unless you chose Always allow for that tool.
-        Credentials are encrypted in data/app.db.
+        Credentials are encrypted in the database.{!admin && " Only a workspace admin can add, change or attach servers."}
       </p>
       {servers.map((m) => (
         <div key={m.id} className="space-y-2 card">
@@ -159,28 +159,28 @@ async function Connections() {
               <div className="text-sm font-medium">{m.name}</div>
               <div className="truncate font-mono text-xs text-mute">{m.url}{m.headers_json !== "{}" && " · auth header set"}</div>
             </div>
-            <div className="flex gap-2">
+            {admin && <div className="flex gap-2">
               <form action={toggleMcp.bind(null, m.id)}><button className={m.enabled ? "btn-solid text-xs" : "btn text-xs"}>{m.enabled ? "On" : "Off"}</button></form>
               <form action={deleteMcp.bind(null, m.id)}><button className="btn text-xs">Delete</button></form>
-            </div>
+            </div>}
           </div>
-          <McpUse server={m} agents={agents} allowed={allowed} />
-          <McpTest id={m.id} />
+          <McpUse server={m} agents={agents} allowed={allowed} admin={admin} />
+          {admin && <McpTest id={m.id} />}
         </div>
       ))}
-      <form action={saveMcp} className="space-y-2 card">
+      {admin && <form action={saveMcp} className="space-y-2 card">
         <div className="text-sm font-medium">Add MCP server</div>
         <input className="field" name="name" placeholder="Name (e.g. docs)" required />
         <input className="field font-mono" name="url" placeholder="https://example.com/mcp" required />
         <input className="field font-mono" name="auth" type="password" placeholder="Authorization header value (optional), e.g. Bearer …" autoComplete="off" />
         <button className="btn-solid">Add</button>
-      </form>
+      </form>}
     </div>
   );
 }
 
 /** Which agents can use a server (a server no agent uses does nothing), and the tools that run without asking. */
-function McpUse({ server, agents, allowed }: { server: McpServer; agents: { id: string; name: string; mcp_json: string }[]; allowed: Set<string> }) {
+function McpUse({ server, agents, allowed, admin }: { server: McpServer; agents: { id: string; name: string; mcp_json: string }[]; allowed: Set<string>; admin: boolean }) {
   const using = agents.filter((a) => (JSON.parse(a.mcp_json) as string[]).includes(server.id));
   const others = agents.filter((a) => !using.includes(a));
   const prefix = mcpToolName(server.name, "");
@@ -189,7 +189,7 @@ function McpUse({ server, agents, allowed }: { server: McpServer; agents: { id: 
     <div className="space-y-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
         <span className={using.length ? "text-mute" : ""}>{using.length ? `Used by ${using.map((a) => a.name).join(", ")}` : "Not attached to any agent yet, so no chat can use it."}</span>
-        {others.map((a) => (
+        {admin && others.map((a) => (
           <form key={a.id} action={attachMcp.bind(null, server.id, a.id)}>
             <button className={`${!using.length && a.id === "assistant" ? "btn-solid" : "btn"} !py-1 text-xs`}>Attach to {a.name}</button>
           </form>
@@ -201,7 +201,7 @@ function McpUse({ server, agents, allowed }: { server: McpServer; agents: { id: 
           {always.map((t) => (
             <form key={t} action={revokeMcpTool.bind(null, server.id, t)} className="chip inline-flex items-center gap-1.5">
               <span className="font-mono">{t.startsWith(prefix) ? t.slice(prefix.length) : t}</span>
-              <button className="text-mute hover:text-fg" title="Ask before every call again">Ask again</button>
+              {admin && <button className="text-mute hover:text-fg" title="Ask before every call again">Ask again</button>}
             </form>
           ))}
         </div>
