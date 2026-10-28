@@ -25,24 +25,35 @@ export async function POST(req: Request) {
   // callbacks below can run after the response ends, outside the request: they get the workspace and user explicitly
   const { workspace: w, uid } = session;
   const scoped = <T,>(fn: () => T) => inWorkspace(w, () => asUser(uid, fn));
-  const apiKey = open(await getSetting("api_key")) || (await envKey("ANTHROPIC_API_KEY"));
-  if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
   const budget = Number(process.env.DAILY_BUDGET_USD) || 0;
-  if (budget && (await scoped(() => spentToday())) >= budget)
-    return new Response(`Today's budget of $${budget} is used up. It resets at midnight.`, { status: 429 });
   const mine = Number(process.env.USER_DAILY_BUDGET_USD) || 0;
-  if (mine && (await scoped(() => spentToday(uid))) >= mine)
-    return new Response(`Your budget of $${mine} for today is used up. It resets at midnight.`, { status: 429 });
+  // independent reads side by side: on Turso each await is a network round trip before the first token
+  const [savedKey, spent, spentMine, saved, agent, genUiSetting, allowed, modelSetting] = await Promise.all([
+    getSetting("api_key"),
+    budget ? scoped(() => spentToday()) : 0,
+    mine ? scoped(() => spentToday(uid)) : 0,
+    scoped(() => loadChat(id)),
+    scoped(() => threadAgentId(id)).then((t) => getAgent(t ?? agentId)), // a thread keeps the agent it started with
+    getSetting("gen_ui", "on"),
+    allowedMcp(),
+    getSetting("model", DEFAULT_MODEL),
+  ]);
+  const apiKey = open(savedKey) || (await envKey("ANTHROPIC_API_KEY"));
+  if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
+  if (budget && spent >= budget) return new Response(`Today's budget of $${budget} is used up. It resets at midnight.`, { status: 429 });
+  if (mine && spentMine >= mine) return new Response(`Your budget of $${mine} for today is used up. It resets at midnight.`, { status: 429 });
 
   const badFile = fileError(message);
   if (badFile) return new Response(badFile, { status: 400 });
-  const messages = mergeMessage(await scoped(() => loadChat(id)), message);
-  const agent = await getAgent((await scoped(() => threadAgentId(id))) ?? agentId); // a thread keeps the agent it started with
-  const genUi = (await getSetting("gen_ui", "on")) !== "off"; // beta switch in Settings: off means plain-text answers
-  const { tools, skills } = await activeTools(agent && { tools: JSON.parse(agent.tools_json), skills: JSON.parse(agent.skills_json) }, genUi);
-  const mcp = await openMcp(agent ? JSON.parse(agent.mcp_json) : []);
+  const messages = mergeMessage(saved, message);
+  const genUi = genUiSetting !== "off"; // beta switch in Settings: off means plain-text answers
+  const runId = generateId();
+  const [{ tools, skills }, mcp] = await Promise.all([
+    activeTools(agent && { tools: JSON.parse(agent.tools_json), skills: JSON.parse(agent.skills_json) }, genUi),
+    openMcp(agent ? JSON.parse(agent.mcp_json) : []),
+    syncApprovals(runId, id, agent?.id, message), // the user's approve/deny click arrives with this request
+  ]);
   Object.assign(tools, mcp.tools);
-  const allowed = await allowedMcp();
 
   const catalog = skills.map((s) => `- ${s.name}: ${s.description}`).join("\n");
   const mcpHint = Object.keys(mcp.tools).length
@@ -63,9 +74,7 @@ export async function POST(req: Request) {
   const last = history.at(-1);
   if (last) last.providerOptions = { ...last.providerOptions, ...CACHE }; // the conversation so far is read from cache next step and next turn
 
-  const model = agent?.model || (await getSetting("model", DEFAULT_MODEL));
-  const runId = generateId();
-  await syncApprovals(runId, id, agent?.id, message); // the user's approve/deny click arrives with this request
+  const model = agent?.model || modelSetting;
   // writes after the last byte are kept alive: a serverless function may freeze once the response ends
   const pending: Promise<unknown>[] = [];
   const track = <T,>(p: Promise<T>) => (pending.push(p), p);
