@@ -90,7 +90,7 @@ async function AI({ password }: { password?: string }) {
           ))}
         </div>
       </form>
-      <Account password={password} admin={admin} />
+      <Account password={password} />
     </div>
   );
 }
@@ -102,7 +102,7 @@ const PASSWORD_MESSAGES: Record<string, string> = {
   mismatch: "The new passwords don't match.",
 };
 
-function Account({ password, admin }: { password?: string; admin: boolean }) {
+function Account({ password }: { password?: string }) {
   return (
     <div className="space-y-4 border-t border-line pt-6">
       <details className="text-sm" open={!!password}>
