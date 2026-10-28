@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { db, getSetting, listMcp, requireAuth, setSetting, ws } from "./db";
+import { db, getAgent, getSetting, listMcp, me, requireAdmin, requireAuth, setSetting, ws } from "./db";
 import { parseTheme, type Theme } from "./theme";
 import { seal } from "./secret";
 import { importGithub } from "./github";
@@ -12,7 +12,7 @@ import type { McpServer } from "./db";
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 export async function saveSettings(f: FormData) {
-  await requireAuth();
+  await requireAdmin();
   await setSetting("model", s(f, "model"));
   if (s(f, "api_key")) await setSetting("api_key", seal(s(f, "api_key"))); // blank keeps existing
   if (s(f, "openai_key")) await setSetting("openai_key", seal(s(f, "openai_key")));
@@ -20,7 +20,7 @@ export async function saveSettings(f: FormData) {
 }
 
 export async function saveGenUi(f: FormData) {
-  await requireAuth();
+  await requireAdmin();
   await setSetting("gen_ui", s(f, "gen_ui") === "off" ? "off" : "on");
   revalidatePath("/settings");
 }
@@ -36,29 +36,30 @@ export async function saveTheme(f: FormData) {
 }
 
 export async function clearKey() {
-  await requireAuth();
+  await requireAdmin();
   await db.prepare("delete from settings where key='api_key' and workspace_id=?").run(await ws());
   revalidatePath("/settings");
 }
 
 export async function clearOpenAIKey() {
-  await requireAuth();
+  await requireAdmin();
   await db.prepare("delete from settings where key='openai_key' and workspace_id=?").run(await ws());
   revalidatePath("/settings");
 }
 
+/** Deletes your own chats; other members' are theirs. */
 export async function clearThreads() {
   await requireAuth();
-  const w = await ws();
-  await db.batch([["delete from messages where thread_id in (select id from threads where workspace_id=?)", w], ["delete from threads where workspace_id=?", w]]);
+  const [w, u] = [await ws(), await me()];
+  await db.batch([["delete from messages where thread_id in (select id from threads where workspace_id=? and user_id=?)", w, u], ["delete from threads where workspace_id=? and user_id=?", w, u]]);
   redirect("/agents");
 }
 
 // Runs and approvals are kept on purpose: deleting a chat must not erase the audit trail.
 export async function deleteThread(id: string, backTo: string) {
   await requireAuth();
-  const w = await ws();
-  await db.batch([["delete from messages where thread_id in (select id from threads where id=? and workspace_id=?)", id, w], ["delete from threads where id=? and workspace_id=?", id, w]]);
+  const [w, u] = [await ws(), await me()];
+  await db.batch([["delete from messages where thread_id in (select id from threads where id=? and workspace_id=? and user_id=?)", id, w, u], ["delete from threads where id=? and workspace_id=? and user_id=?", id, w, u]]);
   revalidatePath("/", "layout");
   redirect(backTo);
 }
@@ -88,16 +89,18 @@ export async function deleteSkill(id: number) {
 }
 
 export async function saveAgent(f: FormData) {
-  await requireAuth();
+  const { role } = await requireAuth();
   const id = s(f, "id") || crypto.randomUUID().slice(0, 8);
   const name = s(f, "name");
   if (!name) return;
+  // connections are admin-only (like attachMcp): a member's save keeps the ones the agent already has
+  const mcp = role === "admin" ? f.getAll("mcp") : JSON.parse((await getAgent(id))?.mcp_json ?? "[]");
   await db.prepare(
     `insert into agents (workspace_id,id,name,description,instructions,model,tools_json,skills_json,mcp_json) values (?,?,?,?,?,?,?,?,?)
      on conflict(id) do update set name=excluded.name, description=excluded.description, instructions=excluded.instructions,
        model=excluded.model, tools_json=excluded.tools_json, skills_json=excluded.skills_json, mcp_json=excluded.mcp_json
      where agents.workspace_id=excluded.workspace_id`,
-  ).run(await ws(), id, name, s(f, "description"), s(f, "instructions"), s(f, "model"), JSON.stringify(f.getAll("tools")), JSON.stringify(f.getAll("skills")), JSON.stringify(f.getAll("mcp")));
+  ).run(await ws(), id, name, s(f, "description"), s(f, "instructions"), s(f, "model"), JSON.stringify(f.getAll("tools")), JSON.stringify(f.getAll("skills")), JSON.stringify(mcp));
   revalidatePath("/", "layout");
   redirect("/agents");
 }
@@ -123,7 +126,7 @@ const validUrl = (u: string) => {
 };
 
 export async function saveMcp(f: FormData) {
-  await requireAuth();
+  await requireAdmin();
   const name = s(f, "name");
   const url = s(f, "url");
   const auth = s(f, "auth");
@@ -138,13 +141,13 @@ export async function saveMcp(f: FormData) {
 }
 
 export async function toggleMcp(id: string) {
-  await requireAuth();
+  await requireAdmin();
   await db.prepare("update mcp_servers set enabled = 1 - enabled where id=? and workspace_id=?").run(id, await ws());
   revalidatePath("/library");
 }
 
 export async function deleteMcp(id: string) {
-  await requireAuth();
+  await requireAdmin();
   const w = await ws();
   if (!(await db.prepare("delete from mcp_servers where id=? and workspace_id=?").run(id, w)).changes) return;
   await clearMcpAllowed(id);
@@ -157,7 +160,7 @@ export async function deleteMcp(id: string) {
 }
 
 export async function testMcp(id: string): Promise<{ ok: boolean; text: string }> {
-  await requireAuth();
+  await requireAdmin();
   const srv = (await db.prepare("select * from mcp_servers where id=? and workspace_id=?").get(id, await ws())) as McpServer | undefined;
   if (!srv) return { ok: false, text: "Server not found" };
   try {
@@ -221,7 +224,7 @@ export async function importGithubDocs(f: FormData): Promise<{ ok: boolean; text
 
 /** Gives an agent a connection (the Connections card's "Attach to …" button). */
 export async function attachMcp(serverId: string, agentId: string) {
-  await requireAuth();
+  await requireAdmin();
   const w = await ws();
   const a = (await db.prepare("select mcp_json from agents where id=? and workspace_id=?").get(agentId, w)) as { mcp_json: string } | undefined;
   const ids = a ? (JSON.parse(a.mcp_json) as string[]) : null;
@@ -232,7 +235,7 @@ export async function attachMcp(serverId: string, agentId: string) {
 
 /** "Always allow" on an approval card: later calls to this MCP tool run without asking. */
 export async function alwaysAllowMcpTool(toolName: string) {
-  await requireAuth();
+  await requireAdmin();
   const s = serverForTool(toolName, await listMcp());
   if (s) await setMcpAllowed(s.id, toolName, true);
   revalidatePath("/library");
@@ -240,7 +243,7 @@ export async function alwaysAllowMcpTool(toolName: string) {
 
 /** Revoke from Library: the tool asks again before every call. */
 export async function revokeMcpTool(serverId: string, toolName: string) {
-  await requireAuth();
+  await requireAdmin();
   await setMcpAllowed(serverId, toolName, false);
   revalidatePath("/library");
 }

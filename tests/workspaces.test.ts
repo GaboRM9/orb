@@ -53,6 +53,7 @@ it("keeps each workspace's rows to itself", async () => {
   const msg = (id: string, text: string) => [{ id, role: "user" as const, parts: [{ type: "text" as const, text }] }];
   delete process.env.OPENAI_API_KEY; // keyword search only: no network
   d.workspaceScope.enterWith("default");
+  d.userScope.enterWith("u-test");
 
   await d.db.prepare("insert or ignore into workspaces (id, name, created) values ('acme', 'Acme', 0)").run();
   await d.inWorkspace("acme", async () => {
@@ -90,4 +91,59 @@ it("checks user passwords against their scrypt hash", () => {
   assert.ok(checkPassword("right horse", h));
   assert.ok(!checkPassword("wrong horse", h));
   assert.ok(!checkPassword("right horse", "garbage"));
+});
+
+it("keeps each member's chats, runs and approvals to themselves, and gives older ones to the first member", async () => {
+  const d = require("../lib/db") as typeof import("../lib/db");
+  const store = require("../lib/chat-store") as typeof import("../lib/chat-store");
+  const runs = require("../lib/runs") as typeof import("../lib/runs");
+  const msg = (id: string, text: string) => [{ id, role: "user" as const, parts: [{ type: "text" as const, text }] }];
+  d.workspaceScope.enterWith("default");
+
+  await d.asUser("ann", () => store.saveChat("t-ann", msg("m1", "ann's plans")));
+  await d.asUser("ben", async () => {
+    assert.ok(!(await d.listThreads()).some((t) => t.id === "t-ann"));
+    assert.deepEqual(await store.loadChat("t-ann"), []);
+    assert.equal(await d.threadAgentId("t-ann"), null);
+    await store.saveChat("t-ann", msg("m2", "overwrite")); // knowing the id doesn't let ben write into it
+    await runs.requestStop("t-ann"); // ...or stop its run
+  });
+  await d.asUser("ann", async () => {
+    assert.equal((await store.loadChat("t-ann"))[0].id, "m1");
+    assert.ok(!(await runs.stopRequested("t-ann", 0)));
+    await runs.requestStop("t-ann");
+    assert.ok(await runs.stopRequested("t-ann", 0), "the owner can stop it");
+  });
+
+  // runs and approvals belong to the member whose chat produced them; only they decide an approval
+  const ask = (approved?: boolean) => ({ id: "x", role: "assistant" as const, parts: [{ type: "tool-fetchUrl", input: {}, approval: { id: "ap-ben", approved } }] });
+  await d.asUser("ben", async () => {
+    await runs.logRun({ id: "r-ben", threadId: "t-ben", model: "m", started: Date.now(), status: "ok", calls: [] });
+    await runs.syncApprovals("r-ben", "t-ben", null, ask() as never);
+  });
+  await d.asUser("ann", () => runs.syncApprovals("r-ann", "t-ben", null, ask(true) as never));
+  assert.ok(!(await runs.listRuns("ann")).some((r) => r.id === "r-ben"));
+  assert.ok((await runs.listRuns("ben")).some((r) => r.id === "r-ben"));
+  assert.ok((await runs.listRuns(null)).some((r) => r.id === "r-ben"), "admins see everyone's");
+  assert.deepEqual(await runs.listApprovals("ann"), []);
+  assert.equal((await runs.listApprovals("ben"))[0].decision, "pending", "ann can't approve ben's tool call");
+  assert.equal((await runs.runSummary("ann")).pending, 0);
+  assert.equal((await runs.runSummary(null)).pending, 1);
+
+  // the first test's pre-workspace thread has no owner until the workspace has a member; the next start assigns it
+  const owner = async () => ((await d.db.prepare("select user_id from threads where id='t1'").get()) as { user_id: string | null }).user_id;
+  assert.equal(await owner(), null);
+  await d.db.batch([
+    ["insert into users (id, email, pass_hash, created) values ('first', 'first@example.com', 'x', 0)"],
+    ["insert into members (workspace_id, user_id, role) values ('default', 'first', 'admin')"],
+    ["insert into users (id, email, pass_hash, created) values ('second', 'second@example.com', 'x', 0)"],
+    ["insert into members (workspace_id, user_id) values ('default', 'second')"],
+  ]);
+  (globalThis as { __ready?: unknown }).__ready = undefined; // a fresh start re-runs setup
+  assert.equal(await owner(), "first");
+  await d.db.prepare("insert into runs (id, thread_id, model, started, ms, status) values ('r-old', 't1', 'm', 0, 0, 'ok'), ('r-gone', 'deleted', 'm', 0, 0, 'ok')").run();
+  (globalThis as { __ready?: unknown }).__ready = undefined;
+  const runOwner = async (id: string) => ((await d.db.prepare("select user_id from runs where id=?").get(id)) as { user_id: string }).user_id;
+  assert.equal(await runOwner("r-old"), "first", "follows its chat");
+  assert.equal(await runOwner("r-gone"), "first", "chat deleted: the first member");
 });

@@ -62,7 +62,7 @@ function ToolRun({ parts }: { parts: ToolPart[] }) {
 // chat id → toolCallId → what that surface shows now (set when the user changes it, sent with the next message)
 const surfaceStates = new Map<string, Record<string, string>>();
 
-export function Chat({ id, initialMessages, agent }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent }) {
+export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent; canAlwaysAllow?: boolean }) {
   const router = useRouter();
   const agentId = agent?.id;
   const transport = useMemo(
@@ -143,7 +143,7 @@ export function Chat({ id, initialMessages, agent }: { id: string; initialMessag
                           <div className="flex gap-2">
                             <button className="btn-solid" onClick={() => respond(true)}>Approve</button>
                             {/* saved before approving, so the resumed turn already runs later calls without asking */}
-                            {getToolName(p).startsWith("mcp_") && (
+                            {canAlwaysAllow && getToolName(p).startsWith("mcp_") && (
                               <button className="btn" title="Later calls to this tool run without asking. Undo in Library → Connections." onClick={async () => { await alwaysAllowMcpTool(getToolName(p)).catch(() => {}); respond(true); }}>
                                 Always allow
                               </button>

@@ -1,5 +1,5 @@
 import { deleteAgent, saveAgent } from "@/lib/actions";
-import { listMcp, listSkills, type Agent } from "@/lib/db";
+import { isAdmin, listMcp, listSkills, type Agent } from "@/lib/db";
 import { MODELS } from "@/lib/models";
 import { DEFAULT_TOOLS, toolInfo, toolNames } from "@/lib/tools";
 
@@ -7,7 +7,7 @@ export async function AgentForm({ agent }: { agent?: Agent }) {
   const tools: string[] = agent ? JSON.parse(agent.tools_json) : [];
   const skills: string[] = agent ? JSON.parse(agent.skills_json) : [];
   const mcp: string[] = agent ? JSON.parse(agent.mcp_json) : [];
-  const servers = await listMcp();
+  const [servers, admin] = await Promise.all([listMcp(), isAdmin()]);
   return (
     <form action={saveAgent} className="space-y-10">
       {agent && <input type="hidden" name="id" value={agent.id} />}
@@ -41,10 +41,10 @@ export async function AgentForm({ agent }: { agent?: Agent }) {
           )}
           {servers.length > 0 && (
             <fieldset className="space-y-2 text-sm">
-              <legend className="mb-2 text-mute">Connections <span>(each tool call asks for approval)</span></legend>
+              <legend className="mb-2 text-mute">Connections <span>({admin ? "each tool call asks for approval" : "a workspace admin attaches these"})</span></legend>
               {servers.map((m) => (
                 <label key={m.id} className="mr-4 inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" name="mcp" value={m.id} defaultChecked={mcp.includes(m.id)} className="accent-current" /> {m.name}
+                  <input type="checkbox" name="mcp" value={m.id} defaultChecked={mcp.includes(m.id)} disabled={!admin} className="accent-current" /> {m.name}
                 </label>
               ))}
             </fieldset>
