@@ -16,14 +16,14 @@ const Title = ({ children }: { children?: string }) => (children ? <div classNam
 /** Returns a component for known UI-tool parts, or null so the caller falls back to the generic card. */
 export function renderUiPart(p: Part, ctx: UiCtx) {
   const { addOutput } = ctx;
-  // surfaces (lib/surfaces) are tools named open_<surface>; they aren't in ChatMessage's types, so match by name
+  // surfaces (lib/surfaces) open with open({ t }) (older chats: open_<surface>); they aren't in ChatMessage's types, so match by name
   const name = isToolUIPart(p) ? getToolName(p) : "";
-  if (isToolUIPart(p) && name.startsWith("open_")) {
-    const surface = name.slice("open_".length);
+  if (isToolUIPart(p) && (name === "open" || name.startsWith("open_"))) {
+    const surface = name === "open" ? ((p.input as { t?: string } | undefined)?.t ?? "") : name.slice("open_".length);
     if (p.state === "output-available")
       return <SurfaceFrame key={p.toolCallId} name={surface} result={p.output as SurfaceResult} live={ctx.live} send={ctx.send} setContext={(t) => ctx.setContext(p.toolCallId, t)} />;
     if (p.state === "output-error") return <div className="chip !px-4 !py-2">Couldn&apos;t open {surface}: {p.errorText}</div>;
-    return <Skeleton label={`Opening ${surface}…`} />;
+    return <Skeleton label={surface ? `Opening ${surface}…` : "Opening…"} />;
   }
   switch (p.type) {
     case "tool-answerVerdict": {

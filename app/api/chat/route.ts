@@ -8,6 +8,7 @@ import { addUsage, DEFAULT_MODEL, type Usage } from "@/lib/models";
 import { allowedMcp, MCP_PREFIX, mcpApproval, openMcp } from "@/lib/mcp";
 import { open } from "@/lib/secret";
 import { logRun, requestStop, spentToday, stopRequested, syncApprovals, type LoggedCall } from "@/lib/runs";
+import { legacySurfaceTools } from "@/lib/surfaces";
 import { activeTools, APPROVAL_TOOLS, genUiTools } from "@/lib/tools";
 import { surfaceContext, UI_HINT } from "@/lib/ui-tools";
 
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
   const surfaceState = surfaceContext(context);
   if (surfaceState) instructions.push({ role: "system", content: surfaceState });
   // with the UI tools even when they're off, so surfaces from earlier turns still reach the model as their summary, not their data
-  const history = fitContext(await convertToModelMessages(messages, { tools: { ...genUiTools(), ...tools } }));
+  const history = fitContext(await convertToModelMessages(messages, { tools: { ...legacySurfaceTools(), ...genUiTools(), ...tools } }));
   const last = history.at(-1);
   if (last) last.providerOptions = { ...last.providerOptions, ...CACHE }; // the conversation so far is read from cache next step and next turn
 

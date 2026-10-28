@@ -4,7 +4,7 @@ import { db, listSkills, me, ws } from "./db";
 import { search } from "./knowledge";
 import { safeFetchText } from "./net-safe";
 import { uiTools } from "./ui-tools";
-import { surfaceTools } from "./surfaces";
+import { openTool } from "./surfaces";
 
 export const allTools = {
   getTime: tool({
@@ -73,7 +73,7 @@ export const toolNames = Object.keys(allTools) as (keyof typeof allTools)[];
 
 /** Enabled demo tools + `loadSkill`, which lazily returns a skill's full body. */
 /** Generative UI (a beta switch in Settings): answer formats, show* views, forms, and surfaces. */
-export const genUiTools = (): Record<string, Tool> => ({ ...uiTools, ...surfaceTools() });
+export const genUiTools = (): Record<string, Tool> => ({ ...uiTools, open: openTool() });
 
 export async function activeTools(only?: { tools: string[]; skills: string[] }, genUi = true) {
   const off = new Set<string>(only ? toolNames.filter((n) => !only.tools.includes(n)) : []);

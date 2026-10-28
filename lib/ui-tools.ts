@@ -115,12 +115,11 @@ export function surfaceContext(raw: unknown) {
 }
 
 export const UI_HINT = `How to answer:
-- When an open_* tool fits the request, open it first: it is a live app the user can adjust. Then add one sentence at most, and don't describe what it shows.
+- When a template fits the request, call open first: it is a live view the user can adjust. Then add one sentence at most, and don't describe what it shows.
 - At most 2 sentences of plain text. Anything with structure goes into a UI tool, and never repeat a tool's content in prose.
 - Answer with answerVerdict (one answer) or answerOptions (a choice). Put supporting data in their evidence, and end with actions the user would take next, instead of offering more help in prose.
 - Use askUser or choose only when you can't continue without the user's input; showPlan for work in progress.
 Recipes:
 - "Which should I…" / "What are my options…" → answerOptions, a comparison table as evidence.
 - "Should I…" / "Is it…" / "What's the best…" → answerVerdict with the call and why.
-- "How is X doing" / numbers over time → answerVerdict with the headline number, a chart as evidence.
-- "How do I get to…" / "How far is…" → open_directions; pick the mode from the question (walk by default).`;
+- "How is X doing" / numbers over time → answerVerdict with the headline number, a chart as evidence.`;

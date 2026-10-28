@@ -200,12 +200,13 @@ describe("POST /api/chat", () => {
       return seen.at(-1)!;
     };
     let sent = await ask("genui-on");
-    assert.ok(sent.tools.includes("answerVerdict") && sent.tools.includes("open_directions"));
+    assert.ok(sent.tools.includes("answerVerdict") && sent.tools.includes("open"));
+    assert.ok(!sent.tools.some((t) => t.startsWith("open_")), "old per-surface tools only convert history");
     assert.match(sent.system, /How to answer/);
     await dbm.setSetting("gen_ui", "off");
     try {
       sent = await ask("genui-off");
-      assert.ok(!sent.tools.some((t) => t.startsWith("answer") || t.startsWith("show") || t.startsWith("open_") || t === "askUser" || t === "choose"));
+      assert.ok(!sent.tools.some((t) => t.startsWith("answer") || t.startsWith("show") || t.startsWith("open") || t === "askUser" || t === "choose"));
       assert.ok(sent.tools.includes("getTime"), "ordinary tools stay");
       assert.doesNotMatch(sent.system, /How to answer/);
     } finally {

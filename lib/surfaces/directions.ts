@@ -66,7 +66,7 @@ export function stepText({ name, maneuver: { type, modifier } }: OsrmStep) {
 export const directions = defineSurface({
   name: "directions",
   title: "Directions",
-  when: "the user wants to get somewhere, or asks how far or how long it takes between two places",
+  when: "getting somewhere, or how far or long between two places; name places as specifically as you can, with the city; mode from the question",
   params: z.object({
     from: z.string().min(2).max(120).describe("start: an address or place name, as specific as you can (include the city)"),
     to: z.string().min(2).max(120).describe("destination, same rules"),

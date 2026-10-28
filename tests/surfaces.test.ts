@@ -39,10 +39,20 @@ describe("surfaces", () => {
     await assert.rejects(lib.runSurface(lib.surfaces.echo, { word: "hi", huge: true }), /too much data/);
   });
 
-  it("the model sees the summary, not the data", async () => {
-    const t = lib.surfaceTools().open_echo;
+  it("the model sees the summary, not the data (old open_<name> calls too)", async () => {
     const out = await lib.runSurface(lib.surfaces.echo, { word: "hi" });
-    assert.deepEqual(await t.toModelOutput!({ toolCallId: "1", input: { word: "hi" }, output: out }), { type: "text", value: "said hi" });
+    for (const t of [lib.openTool(), lib.legacySurfaceTools().open_echo])
+      assert.deepEqual(await t.toModelOutput!({ toolCallId: "1", input: {}, output: out }), { type: "text", value: "said hi" });
+  });
+
+  it("open: one tool, a catalog line per template, params checked by the template", async () => {
+    assert.equal(lib.signature(lib.surfaces.directions), "directions(from, to, mode?=walk|bike|drive)");
+    assert.match(lib.catalog(), /^- echo\(word, huge\?\): testing$/m);
+    const open = lib.openTool();
+    assert.match(open.description as string, /- directions\(/);
+    const run = (input: unknown) => open.execute!(input as never, { toolCallId: "1", messages: [] } as never);
+    assert.deepEqual(await run({ t: "echo", p: { word: "yo" } }), { params: { word: "yo" }, data: { word: "yo" }, summary: "said yo" });
+    await assert.rejects(run({ t: "echo", p: { word: 5 } }), /word/); // readable, so the model can retry
   });
 
   it("refresh: needs a session, a known surface and valid params", async () => {
@@ -64,7 +74,6 @@ describe("surfaces", () => {
     assert.equal(step("new name", "straight"), "Continue onto Gran Vía");
     assert.equal(step("roundabout", "right", ""), "Take the roundabout");
     assert.equal(step("arrive"), "Arrive");
-    assert.ok("open_directions" in lib.surfaceTools());
   });
 
   it("directions: places are cached and Nominatim calls spaced a second apart", async () => {
