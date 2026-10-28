@@ -296,6 +296,18 @@ describe("auth", () => {
     assert.equal(await dbm.sessionFor(t2), null, "signed out everywhere");
   });
 
+  it("changing the password needs the current one and signs out every session", async () => {
+    await dbm.db.prepare("insert into users (id, email, pass_hash, created) values ('u3', 'cy@x.test', ?, 0)").run(auth.hashPassword("old-password"));
+    await dbm.db.prepare("insert into members (workspace_id, user_id) values ('default', 'u3')").run();
+    const before = auth.makeToken("u3", "default", 0);
+    assert.equal(await dbm.changePassword("u3", "not-it", "new-password"), null);
+    assert.equal(await dbm.changePassword("u3", "old-password", "new-password"), 1);
+    assert.equal(await dbm.sessionFor(before), null, "old sessions are out");
+    assert.ok(await dbm.sessionFor(auth.makeToken("u3", "default", 1)));
+    assert.equal(await dbm.signIn("cy@x.test", "old-password"), null);
+    assert.ok(await dbm.signIn("cy@x.test", "new-password"));
+  });
+
   it("fails closed without a secret; on Vercel the password doesn't count as one", () => {
     process.env.VERCEL = "1";
     assert.ok(!auth.authConfigured());

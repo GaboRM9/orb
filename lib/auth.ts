@@ -3,6 +3,7 @@ import { secret } from "./secret";
 
 export const COOKIE = "orb_session";
 export const SESSION_SECONDS = 7 * 24 * 3600;
+export const MIN_PASSWORD = 10;
 
 // Users sign in with email + password (users table). Sessions are stateless HMAC tokens, uid.workspace.token_v.exp.sig,
 // signed with AUTH_SECRET (or ADMIN_PASSWORD locally; on Vercel AUTH_SECRET is required). No database here, so the

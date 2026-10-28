@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { logout } from "@/app/login/actions";
+import { logout, updatePassword } from "@/app/login/actions";
+import { MIN_PASSWORD } from "@/lib/auth";
 import { clearKey, clearOpenAIKey, clearThreads, saveGenUi, saveSettings, saveTheme } from "@/lib/actions";
 import { parseTheme } from "@/lib/theme";
 import { RunsPanel } from "@/components/runs-panel";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300; // GitHub import and embedding run inside this page's server actions
 
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
-  const { tab, agent, status, view } = await searchParams;
+  const { tab, agent, status, view, password } = await searchParams;
   const one = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   const runs = tab === "runs"; // activity is reached by link, not a tab
   return (
@@ -22,13 +23,13 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           <RunsPanel view={one(view)} agent={one(agent)} status={one(status)} />
         </>
       ) : (
-        <AI />
+        <AI password={one(password)} />
       )}
     </div>
   );
 }
 
-async function AI() {
+async function AI({ password }: { password?: string }) {
   const hasKey = !!(await getSetting("api_key"));
   const hasOpenAI = !!(await getSetting("openai_key"));
   const model = await getSetting("model", DEFAULT_MODEL);
@@ -77,14 +78,31 @@ async function AI() {
           ))}
         </div>
       </form>
-      <Account />
+      <Account password={password} />
     </div>
   );
 }
 
-function Account() {
+const PASSWORD_MESSAGES: Record<string, string> = {
+  changed: "Password changed. Other devices are signed out.",
+  wrong: "Current password is wrong.",
+  short: `Use at least ${MIN_PASSWORD} characters.`,
+  mismatch: "The new passwords don't match.",
+};
+
+function Account({ password }: { password?: string }) {
   return (
     <div className="space-y-4 border-t border-line pt-6">
+      <details className="text-sm" open={!!password}>
+        <summary className="cursor-pointer text-mute hover:text-fg">Change password</summary>
+        <form action={updatePassword} className="mt-3 max-w-sm space-y-3">
+          <input className="field" name="current" type="password" placeholder="Current password" autoComplete="current-password" required aria-label="Current password" />
+          <input className="field" name="new" type="password" placeholder="New password" autoComplete="new-password" minLength={MIN_PASSWORD} required aria-label="New password" />
+          <input className="field" name="confirm" type="password" placeholder="New password, again" autoComplete="new-password" minLength={MIN_PASSWORD} required aria-label="Confirm new password" />
+          {password && PASSWORD_MESSAGES[password] && <p role="status">{PASSWORD_MESSAGES[password]}</p>}
+          <button className="btn-solid">Change password</button>
+        </form>
+      </details>
       <Link href="/settings?tab=runs" className="block text-sm text-mute hover:text-fg">Activity →</Link>
       <div className="flex flex-wrap gap-2">
       <details className="relative">
