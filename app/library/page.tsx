@@ -22,7 +22,7 @@ export default async function LibraryPage({ searchParams }: PageProps<"/library"
   const shown = tabs.filter(([k]) => admin || k !== "evals"); // evals spend the workspace's tokens: admins only
   const active = shown.find(([k]) => k === tab)?.[0] ?? "knowledge";
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
+    <div className="mx-auto max-w-3xl space-y-6 px-6 py-8 md:px-10 md:py-14">
       <h1>Library</h1>
       <nav className="seg">
         {shown.map(([k, label]) => (

@@ -52,6 +52,8 @@ body { background: var(--bg); color: var(--fg); font-family: var(--font); -webki
 h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
 ::selection { background: var(--ring); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* iOS zooms the page into any field under 16px; touch screens get 16px text in every field */
+@media (pointer: coarse) { input, textarea, select { font-size: max(1rem, 16px); } }
 .field:focus-visible, .composer textarea:focus-visible { outline: none; } /* these draw their own focus ring */
 
 /* a chat turn: the margin line marks the speaker (ink for you, accent for the agent) and pulses while the agent works */
@@ -95,8 +97,8 @@ h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
   .field { @apply w-full rounded-ctl border border-line bg-bg px-5 py-2.5 text-sm outline-none transition-shadow placeholder:text-mute focus:border-accent focus:ring-3 focus:ring-ring; }
   textarea.field { border-radius: var(--radius-lg); } /* multi-line fields curve instead of becoming pills */
   /* segmented tabs: a tinted track, the current one raised */
-  .seg { @apply inline-flex gap-1 rounded-ctl bg-surface-2 p-1; }
-  .seg > a, .seg > button { @apply rounded-ctl px-4 py-1.5 text-sm text-mute transition-colors hover:text-fg; }
+  .seg { @apply inline-flex max-w-full gap-1 overflow-x-auto rounded-ctl bg-surface-2 p-1 [scrollbar-width:none]; } /* too many tabs for a phone: the track scrolls */
+  .seg > a, .seg > button { @apply shrink-0 whitespace-nowrap rounded-ctl px-4 py-1.5 text-sm text-mute transition-colors hover:text-fg; }
   .seg > [aria-current="page"], .seg > [aria-pressed="true"] { @apply bg-bg text-fg shadow-sm; }
   .act { @apply rounded-ctl border border-line px-3 py-1 text-xs text-mute transition-colors hover:bg-hover hover:text-fg disabled:opacity-40; }
   .act[aria-pressed="true"] { @apply bg-surface-2 text-fg; }

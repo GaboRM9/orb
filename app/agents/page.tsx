@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function AgentsPage() {
   const [saved, env, agents] = await Promise.all([getSetting("api_key"), envKey("ANTHROPIC_API_KEY"), listAgents()]);
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
+    <div className="mx-auto max-w-3xl space-y-6 px-6 py-8 md:px-10 md:py-14">
       <h1>Agents</h1>
       {!saved && !env && (
         <p className="text-sm">Connect Anthropic in <Link href="/settings" className="underline">Settings</Link> to start chatting.</p>

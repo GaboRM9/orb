@@ -20,7 +20,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const one = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   const runs = tab === "runs"; // activity is reached by link, not a tab
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
+    <div className="mx-auto max-w-3xl space-y-6 px-6 py-8 md:px-10 md:py-14">
       <h1>Settings</h1>
       {runs ? (
         <>

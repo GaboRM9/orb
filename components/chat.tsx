@@ -85,7 +85,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={() => navigator.clipboard?.writeText(text).then(() => (setDone(true), setTimeout(() => setDone(false), 1200))).catch(() => {})}
-      className="text-xs text-mute opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
+      className="text-xs text-mute opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100"
     >
       {done ? "Copied" : "Copy"}
     </button>
@@ -185,7 +185,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, onSt
             // no bubbles: a line in the margin says who's speaking, and pulses while the agent works
             <div key={m.id} className={`turn ${m.role === "assistant" ? "turn-agent" : "turn-user"} ${live ? "turn-live" : ""} ${m.id === last?.id ? "rise" : ""}`}>
               <div className={`mb-1 text-xs text-mute ${m.role === "user" ? "text-right" : ""}`}>{m.role === "user" ? "You" : name}</div>
-              <div className="group space-y-3 text-sm leading-7">
+              <div className="group space-y-3 text-sm leading-7 wrap-break-word">
                 {(() => {
                   const blocks: React.ReactNode[] = [];
                   let run: ToolPart[] = [];
@@ -292,8 +292,9 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, onSt
             onChange={(e) => setInput(e.target.value)}
             onPaste={(e) => e.clipboardData.files.length && (e.preventDefault(), attach(e.clipboardData.files))}
             onKeyDown={(e) => {
-              // Enter sends; Shift+Enter inserts a newline; IME composition is left alone
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              // Enter sends; Shift+Enter inserts a newline; IME composition is left alone.
+              // Touch keyboards have no Shift+Enter, so there Enter is a newline and the button sends.
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !matchMedia("(pointer: coarse)").matches) {
                 e.preventDefault();
                 e.currentTarget.form?.requestSubmit();
               }
