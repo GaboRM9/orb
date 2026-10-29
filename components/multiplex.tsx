@@ -156,12 +156,12 @@ export function Multiplex({ panes, agents, threads, canAlwaysAllow }: {
                     <span title={label(s)} className={`size-2 shrink-0 rounded-full ${dot(s)}`} />
                     <span className="shrink-0 font-medium">{p.agent?.name ?? "orb"}</span>
                     <span className="min-w-0 flex-1 truncate text-mute">{p.title}</span>
-                    {canSplit && <SplitMenu from={p} agents={agents} closed={closed} add={addAfter(i)} className="grid h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg" />}
+                    {canSplit && <SplitMenu from={p} agents={agents} closed={closed} add={addAfter(i)} className="grid h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg pointer-coarse:size-8" />}
                     <button onClick={() => setMax(maxed === p.id ? null : p.id)} aria-label={maxed === p.id ? "Restore" : "Maximize"} title={maxed === p.id ? "Restore (Esc)" : "Maximize"} className="hidden h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg md:grid">
                       {maxed === p.id ? <MinimizeIcon className="h-3.5 w-3.5" /> : <MaximizeIcon className="h-3.5 w-3.5" />}
                     </button>
                     {/* closing a pane doesn't stop its run: like closing a tab, it finishes and is saved */}
-                    <button onClick={() => go(list.filter((q) => q.id !== p.id))} aria-label="Close pane" title="Close pane" className="grid h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg"><XIcon className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => go(list.filter((q) => q.id !== p.id))} aria-label="Close pane" title="Close pane" className="grid h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg pointer-coarse:size-8"><XIcon className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
                 <div className="min-h-0 flex-1">

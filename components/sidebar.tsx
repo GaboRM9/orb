@@ -86,8 +86,8 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
                     className={`${item(shown)} rounded-ctl !py-1.5 !pl-4 !pr-9 !text-sm`}>
                     {t.title || "Untitled"}
                   </Link>
-                  <form action={deleteThread.bind(null, t.id, here ? "/" : path)} className={`absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 text-mute hover:text-fg`}>
-                    <Submit aria-label={`Delete ${t.title || "chat"}`} className="grid h-6 w-6 place-items-center rounded-ctl text-current hover:bg-hover disabled:opacity-40"><XIcon className="h-3.5 w-3.5" /></Submit>
+                  <form action={deleteThread.bind(null, t.id, here ? "/" : path)} className={`absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100 text-mute hover:text-fg`}>
+                    <Submit aria-label={`Delete ${t.title || "chat"}`} className="grid h-6 w-6 place-items-center rounded-ctl text-current hover:bg-hover disabled:opacity-40 pointer-coarse:size-8"><XIcon className="h-3.5 w-3.5" /></Submit>
                   </form>
                 </div>
               );

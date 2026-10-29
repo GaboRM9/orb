@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Sidebar } from "@/components/sidebar";
+import { Viewport } from "@/components/viewport";
 import { getSetting, listThreads, session } from "@/lib/db";
 import { parseTheme, themeStyle } from "@/lib/theme";
 import "./globals.css";
@@ -19,7 +20,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const theme = parseTheme(authed ? await getSetting("theme", "{}") : "{}");
   return (
     <html lang="en" data-mode={theme.mode} style={themeStyle(theme)} className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex h-full flex-col md:flex-row">
+      <body className="flex h-full flex-col overscroll-none md:flex-row">
+        <Viewport />
         {authed && <Sidebar threads={threads} />}
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</main>
       </body>
