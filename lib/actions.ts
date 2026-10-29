@@ -23,7 +23,7 @@ export async function saveSettings(f: FormData) {
   await requireAdmin();
   if (f.has("model")) await setSetting("model", s(f, "model"));
   for (const k of KEYS) if (s(f, k)) await setSetting(k, seal(s(f, k)));
-  revalidatePath("/settings");
+  revalidatePath("/library");
 }
 
 export async function saveGenUi(f: FormData) {
@@ -46,7 +46,7 @@ export async function clearKey(k: (typeof KEYS)[number]) {
   await requireAdmin();
   if (!KEYS.includes(k)) throw new Error("Unknown key");
   await db.prepare("delete from settings where key=? and workspace_id=?").run(k, await ws());
-  revalidatePath("/settings");
+  revalidatePath("/library");
 }
 
 /** Deletes your own chats; other members' are theirs. */
@@ -320,7 +320,7 @@ export async function delegateBrief(threadId: string): Promise<{ brief: string }
     .slice(-60_000);
   if (!transcript) return { error: "Nothing to delegate yet: send a message first." };
   const apiKey = open(await getSetting("api_key")) || (await envKey("ANTHROPIC_API_KEY"));
-  if (!apiKey) return { error: "Set your Anthropic API key in Settings." };
+  if (!apiKey) return { error: "Set your Anthropic API key in Library → Connections." };
   const overBudget = await budgetError(uid);
   if (overBudget) return { error: overBudget };
   const [id, started] = [generateId(), Date.now()];
