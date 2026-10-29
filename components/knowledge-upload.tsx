@@ -57,7 +57,7 @@ export function GithubImport() {
       className="space-y-3">
       <input className="field font-mono" name="repo" placeholder="owner/repo" required aria-label="Repository" />
       <input className="field font-mono" name="dir" placeholder="Folder in the repo (optional), e.g. docs" aria-label="Folder" />
-      <p className="text-xs text-mute">Private repos need a token: connect GitHub in Settings.</p>
+      <p className="text-xs text-mute">Private repos need a token: connect GitHub in Library → Connections.</p>
       <div className="flex items-center gap-3">
         <button className="btn-solid" disabled={busy}>{busy ? "Importing…" : "Import"}</button>
         {msg && <span className="text-xs text-mute">{msg}</span>}

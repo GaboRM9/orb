@@ -10,7 +10,7 @@ export async function importGithub(repo: string, dir = "", token = "") {
   const gh = (url: string, accept = "application/vnd.github+json") =>
     fetch(url, { headers: { accept, ...(token && { authorization: `Bearer ${token}` }) }, signal: AbortSignal.timeout(15000) });
   const tree = await gh(`https://api.github.com/repos/${repo}/git/trees/HEAD?recursive=1`);
-  if (!tree.ok) throw new Error(`GitHub: ${tree.status} (private repo? connect GitHub in Settings)`);
+  if (!tree.ok) throw new Error(`GitHub: ${tree.status} (private repo? connect GitHub in Library → Connections)`);
   const { tree: all, truncated } = (await tree.json()) as { tree: { path: string; type: string; size?: number }[]; truncated?: boolean };
   const files = all
     .filter((f) => f.type === "blob" && TEXT.test(f.path) && (f.size ?? 0) < 500_000 && (!dir || f.path.startsWith(dir + "/")))

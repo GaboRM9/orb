@@ -70,7 +70,7 @@ export async function runEval(agentId: string, model?: string): Promise<string |
   const cases = await listCases(agentId);
   if (!agent || !cases.length) return { error: "Add a test question first." };
   const apiKey = open(await getSetting("api_key")) || (await envKey("ANTHROPIC_API_KEY"));
-  if (!apiKey) return { error: "Set your Anthropic API key in Settings." };
+  if (!apiKey) return { error: "Set your Anthropic API key in Library → Connections." };
   const overBudget = await budgetError(await me());
   if (overBudget) return { error: overBudget };
   const modelId = (model && MODELS.includes(model) && model) || agent.model || (await getSetting("model", DEFAULT_MODEL));

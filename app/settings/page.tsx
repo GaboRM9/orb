@@ -1,16 +1,14 @@
 import Link from "next/link";
 import { logout, updatePassword } from "@/app/login/actions";
 import { MIN_PASSWORD } from "@/lib/auth";
-import { clearKey, clearThreads, saveGenUi, saveSettings, saveTheme } from "@/lib/actions";
+import { clearThreads, saveGenUi, saveTheme } from "@/lib/actions";
 import { parseTheme } from "@/lib/theme";
 import { RunsPanel } from "@/components/runs-panel";
 import { Members } from "@/components/members";
-import { Dialog } from "@/components/dialog";
 import { Submit } from "@/components/submit";
 import { ThemeSwitch } from "@/components/theme-switch";
-import { AnthropicLogo, GithubLogo, OpenAILogo } from "@/components/icons";
-import { DEFAULT_WS, getSetting, listMembers, requireAuth } from "@/lib/db";
-import { DEFAULT_MODEL, MODELS } from "@/lib/models";
+import { getSetting, listMembers, requireAuth } from "@/lib/db";
+import { DEFAULT_MODEL } from "@/lib/models";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // GitHub import and embedding run inside this page's server actions
@@ -36,35 +34,15 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
 async function AI({ password }: { password?: string }) {
   const s = await requireAuth();
-  const [apiKey, openaiKey, githubToken, model, theme, genUi, members] = await Promise.all([
-    getSetting("api_key"),
-    getSetting("openai_key"),
-    getSetting("github_token"),
+  const [model, theme, genUi, members] = await Promise.all([
     getSetting("model", DEFAULT_MODEL),
     getSetting("theme", "{}"),
     getSetting("gen_ui", "on"),
     s.role === "admin" ? listMembers(s.workspace) : [],
   ]);
-  const env = s.workspace === DEFAULT_WS; // only the first workspace may fall back to the env keys (envKey)
   return (
     <div className="space-y-6">
       {s.role === "admin" ? (<>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Tile logo={<AnthropicLogo />} name="Anthropic" saved={!!apiKey} fromEnv={env && !!process.env.ANTHROPIC_API_KEY} clear={clearKey.bind(null, "api_key")}>
-          <input className="field font-mono" name="api_key" type="password" placeholder={apiKey ? "Saved. Paste a new key to replace it" : "sk-ant-…"} autoComplete="off" aria-label="Anthropic API key" />
-          <select className="field" name="model" defaultValue={model} aria-label="Model">
-            {MODELS.map((m) => <option key={m}>{m}</option>)}
-          </select>
-        </Tile>
-        <Tile logo={<OpenAILogo />} name="OpenAI" saved={!!openaiKey} fromEnv={env && !!process.env.OPENAI_API_KEY} clear={clearKey.bind(null, "openai_key")}
-          note="Optional. Adds meaning-based search to your Library; document text and queries are sent to OpenAI.">
-          <input className="field font-mono" name="openai_key" type="password" placeholder={openaiKey ? "Saved. Paste a new key to replace it" : "sk-…"} autoComplete="off" aria-label="OpenAI API key" />
-        </Tile>
-        <Tile logo={<GithubLogo />} name="GitHub" saved={!!githubToken} clear={clearKey.bind(null, "github_token")}
-          note="Optional. A read-only token lets Library import docs from private repos. Public repos need none.">
-          <input className="field font-mono" name="github_token" type="password" placeholder={githubToken ? "Saved. Paste a new token to replace it" : "github_pat_…"} autoComplete="off" aria-label="GitHub token" />
-        </Tile>
-      </div>
       <form action={saveGenUi} className="flex items-center justify-between gap-4 text-sm">
         <span>
           Generative UI
@@ -88,37 +66,6 @@ async function AI({ password }: { password?: string }) {
         <ThemeSwitch mode={parseTheme(theme).mode} />
       </form>
       <Account password={password} />
-    </div>
-  );
-}
-
-/** An integration: its mark, whether it's connected, and a dialog holding its key. */
-function Tile({ logo, name, saved, fromEnv, clear, note, children }: { logo: React.ReactNode; name: string; saved: boolean; fromEnv?: boolean; clear: () => Promise<void>; note?: string; children: React.ReactNode }) {
-  const on = saved || fromEnv;
-  return (
-    <div className="card flex flex-col gap-5 !p-4">
-      <div className="flex items-center gap-3">
-        {logo}
-        <span className="text-sm font-medium">{name}</span>
-      </div>
-      <div className="mt-auto flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-xs text-mute">
-          <span className={`size-1.5 rounded-full ${on ? "bg-accent" : "bg-line"}`} />
-          {on ? "Connected" : "Not set"}
-        </span>
-        <Dialog label={on ? "Manage" : "Set up"} title={name} className={on ? "btn !py-1 text-xs" : "btn-solid !py-1 text-xs"}>
-          <form action={saveSettings} className="space-y-3">
-            {children}
-            {note && <p className="text-xs text-mute">{note}</p>}
-            {fromEnv && !saved && <p className="text-xs text-mute">Using the key from the server environment. A key saved here takes precedence.</p>}
-            <p className="text-xs text-mute">Saved encrypted with AUTH_SECRET; change that secret and you&apos;ll need to enter it again.</p>
-            <div className="flex gap-2">
-              <Submit className="btn-solid">Save</Submit>
-              {saved && <Submit className="btn" formAction={clear} formNoValidate>Remove</Submit>}
-            </div>
-          </form>
-        </Dialog>
-      </div>
     </div>
   );
 }

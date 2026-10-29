@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     getSetting("model", DEFAULT_MODEL),
   ]);
   const apiKey = open(savedKey) || (await envKey("ANTHROPIC_API_KEY"));
-  if (!apiKey) return new Response("Set your Anthropic API key in Settings.", { status: 400 });
+  if (!apiKey) return new Response("Set your Anthropic API key in Library → Connections.", { status: 400 });
   if (overBudget) return new Response(overBudget, { status: 429 });
 
   const badFile = fileError(message);
