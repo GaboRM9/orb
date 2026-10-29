@@ -2,27 +2,32 @@
 
 [![ci](https://github.com/GaboRM9/orb/actions/workflows/ci.yml/badge.svg)](https://github.com/GaboRM9/orb/actions/workflows/ci.yml)
 
-A calm, minimal agent workspace (AI SDK v7): chat, tools, skills, settings. libSQL storage (a local SQLite file, or Turso on Vercel), Anthropic models.
+A calm, minimal agent workspace for teams: agents with real tools, and every risky action approved, logged and costed. AI SDK v7, Anthropic models, libSQL (a local SQLite file, or Turso on Vercel).
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FGaboRM9%2Forb&project-name=orb&env=AUTH_SECRET%2CANTHROPIC_API_KEY%2CDAILY_BUDGET_USD&envDescription=AUTH_SECRET%3A%20any%20long%20random%20string%20%28openssl%20rand%20-base64%2032%29.%20You%20paste%20it%20once%20to%20create%20the%20admin.%20DAILY_BUDGET_USD%20caps%20spend%20per%20day%2C%20e.g.%205.&envLink=https%3A%2F%2Fgithub.com%2FGaboRM9%2Forb%2Fblob%2Fmain%2F.env.example)
+
+1. Click **Deploy**. Paste a long random `AUTH_SECRET` (`openssl rand -base64 32`), your Anthropic key and a daily budget.
+2. In the new project, add **Turso** (Storage → Marketplace), then redeploy.
+3. Open the URL, paste your `AUTH_SECRET` once, and create your admin account. Done.
+
+**Locally:**
 
 ```
 npm i && npm run dev -- -p 3100
 ```
-Set `AUTH_SECRET` in `.env.local` (`openssl rand -base64 32`, see `.env.example`), then create the first user. It prints a generated password once:
+Set `AUTH_SECRET` in `.env.local` (see `.env.example`), open http://localhost:3100 and create the admin the same way.
 
-```
-npx tsx scripts/user.mts add you@example.com --admin
-```
+**Public demo:** set `DEMO=1` with `DAILY_BUDGET_USD` and `USER_DAILY_BUDGET_USD` (it stays off without both). The sign-in page gets a **Try the demo** button: every visitor gets their own private chats, can't edit shared agents, skills or Knowledge, and guest signups are capped at 3 per IP per hour and `DEMO_GUESTS_PER_DAY` (default 200) a day.
 
-Admins add more people in **Settings → Members** (add, change role, reset a password, remove; a generated password is shown once), or with the same command (leave off `--admin` for a member; `--workspace <id>` for another workspace). An account belongs to one workspace. Add your Anthropic key in Settings (or `ANTHROPIC_API_KEY` in `.env.local`).
+Admins add more people in **Settings → Members** (add, change role, reset a password, remove; a generated password is shown once), or from the command line: `npx tsx scripts/user.mts add you@example.com [--admin] [--workspace <id>]`. An account belongs to one workspace. Add your Anthropic key in Settings (or `ANTHROPIC_API_KEY`).
 
 **Roles:** admins manage the workspace: members, API keys, model, Generative UI, MCP connections (add, attach to agents, Always allow), and see every member's runs and approvals in Settings → Activity. Members chat, edit agents (but not their connections), skills and Knowledge, and change their own password. Agents, skills and Knowledge are shared; **chats belong to whoever started them** and only they can see, continue, stop or delete them. Their runs and approvals are theirs too: members see their own Activity, and only the chat's owner decides its approvals. `DAILY_BUDGET_USD` caps the whole workspace. Chats, runs and approvals from before users existed go to the workspace's first member.
 
-## Deploy on Vercel
+## Deploy on Vercel by hand
 
 1. `vercel link`, then add the **Turso** integration (Marketplace → Storage). It sets `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`.
 2. Set `AUTH_SECRET` (`openssl rand -base64 32`). It signs sessions and encrypts saved keys; changing it later signs everyone out and makes saved keys unreadable.
-3. `vercel deploy --prod`. The schema is created on first request.
-4. Create the first admin against the production database: `vercel env pull .env.local`, then `npx tsx scripts/user.mts add you@example.com --admin` (it uses `TURSO_*` when set).
+3. `vercel deploy --prod`. The schema is created on first request; open the URL and create the admin with your `AUTH_SECRET`.
 
 Notes: request bodies are capped at 4.5 MB on Vercel, so Knowledge uploads are limited to 4 MB per request. Locally nothing changes: with no `TURSO_*` variables the app uses `data/app.db`. Use a separate Turso database for Preview deployments so previews can't write to production.
 
