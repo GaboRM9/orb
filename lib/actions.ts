@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { addMember, db, getAgent, getSetting, listMcp, me, removeMember, requireAdmin, requireAuth, requireEditor, resetMemberPassword, setMemberRole, setSetting, ws } from "./db";
 import { parseTheme, type Theme } from "./theme";
-import { seal } from "./secret";
+import { open, seal } from "./secret";
 import { importGithub } from "./github";
 import { addDoc, deleteDoc, deleteFolder, embedMissing } from "./knowledge";
 import { clearMcpAllowed, probeMcp, serverForTool, setMcpAllowed } from "./mcp";
@@ -12,11 +12,13 @@ import type { McpServer } from "./db";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
+const KEYS = ["api_key", "openai_key", "github_token"] as const;
+
+// each integration's dialog posts only its own fields; a blank key keeps the saved one
 export async function saveSettings(f: FormData) {
   await requireAdmin();
-  await setSetting("model", s(f, "model"));
-  if (s(f, "api_key")) await setSetting("api_key", seal(s(f, "api_key"))); // blank keeps existing
-  if (s(f, "openai_key")) await setSetting("openai_key", seal(s(f, "openai_key")));
+  if (f.has("model")) await setSetting("model", s(f, "model"));
+  for (const k of KEYS) if (s(f, k)) await setSetting(k, seal(s(f, k)));
   revalidatePath("/settings");
 }
 
@@ -36,15 +38,10 @@ export async function saveTheme(f: FormData) {
   revalidatePath("/", "layout");
 }
 
-export async function clearKey() {
+export async function clearKey(k: (typeof KEYS)[number]) {
   await requireAdmin();
-  await db.prepare("delete from settings where key='api_key' and workspace_id=?").run(await ws());
-  revalidatePath("/settings");
-}
-
-export async function clearOpenAIKey() {
-  await requireAdmin();
-  await db.prepare("delete from settings where key='openai_key' and workspace_id=?").run(await ws());
+  if (!KEYS.includes(k)) throw new Error("Unknown key");
+  await db.prepare("delete from settings where key=? and workspace_id=?").run(k, await ws());
   revalidatePath("/settings");
 }
 
@@ -216,7 +213,7 @@ export async function embedKnowledge() {
 export async function importGithubDocs(f: FormData): Promise<{ ok: boolean; text: string }> {
   await requireEditor();
   try {
-    const { n, truncated } = await importGithub(s(f, "repo"), s(f, "dir"), s(f, "token"));
+    const { n, truncated } = await importGithub(s(f, "repo"), s(f, "dir"), open(await getSetting("github_token")) ?? "");
     revalidatePath("/library");
     return { ok: true, text: `Imported ${n} files${truncated ? " (repo too large: only the first 200 docs were taken, narrow with a folder)" : ""}` };
   } catch (e) {

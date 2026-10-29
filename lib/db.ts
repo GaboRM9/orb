@@ -161,7 +161,7 @@ async function init() {
     await c.execute(`update ${t} set user_id=coalesce((select th.user_id from threads th where th.id=${t}.thread_id), ${first(t)}) where user_id is null`);
   await c.execute({ sql: "insert or ignore into workspaces (id, name, created) values ('default', 'Default', ?)", args: [Date.now()] });
   // encrypt credentials saved before encryption existed
-  for (const r of (await all(c, "select key, value from settings where key in ('api_key','openai_key')", [])) as { key: string; value: string }[])
+  for (const r of (await all(c, "select key, value from settings where key in ('api_key','openai_key','github_token')", [])) as { key: string; value: string }[])
     if (!isSealed(r.value)) await c.execute({ sql: "update settings set value=? where key=?", args: [seal(r.value), r.key] });
   for (const r of (await all(c, "select id, headers_json h from mcp_servers where headers_json != '{}'", [])) as { id: string; h: string }[])
     if (!isSealed(r.h)) await c.execute({ sql: "update mcp_servers set headers_json=? where id=?", args: [seal(r.h), r.id] });

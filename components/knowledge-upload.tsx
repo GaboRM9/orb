@@ -54,11 +54,10 @@ export function GithubImport() {
         const data = new FormData(e.currentTarget);
         start(async () => setMsg((await importGithubDocs(data)).text));
       }}
-      className="space-y-2 card">
-      <div className="text-sm font-medium">Import from GitHub</div>
-      <input className="field font-mono" name="repo" placeholder="owner/repo" required />
-      <input className="field font-mono" name="dir" placeholder="Folder in the repo (optional), e.g. docs" />
-      <input className="field font-mono" name="token" type="password" placeholder="Token for private repos (optional, not saved)" autoComplete="off" />
+      className="space-y-3">
+      <input className="field font-mono" name="repo" placeholder="owner/repo" required aria-label="Repository" />
+      <input className="field font-mono" name="dir" placeholder="Folder in the repo (optional), e.g. docs" aria-label="Folder" />
+      <p className="text-xs text-mute">Private repos need a token: connect GitHub in Settings.</p>
       <div className="flex items-center gap-3">
         <button className="btn-solid" disabled={busy}>{busy ? "Importing…" : "Import"}</button>
         {msg && <span className="text-xs text-mute">{msg}</span>}

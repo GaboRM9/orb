@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { logout, updatePassword } from "@/app/login/actions";
 import { MIN_PASSWORD } from "@/lib/auth";
-import { clearKey, clearOpenAIKey, clearThreads, saveGenUi, saveSettings, saveTheme } from "@/lib/actions";
+import { clearKey, clearThreads, saveGenUi, saveSettings, saveTheme } from "@/lib/actions";
 import { parseTheme } from "@/lib/theme";
 import { RunsPanel } from "@/components/runs-panel";
 import { Members } from "@/components/members";
+import { Dialog } from "@/components/dialog";
+import { Submit } from "@/components/submit";
+import { ThemeSwitch } from "@/components/theme-switch";
+import { AnthropicLogo, GithubLogo, OpenAILogo } from "@/components/icons";
 import { DEFAULT_WS, getSetting, listMembers, requireAuth } from "@/lib/db";
 import { DEFAULT_MODEL, MODELS } from "@/lib/models";
 
@@ -20,7 +24,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
       <h1>Settings</h1>
       {runs ? (
         <>
-          <Link href="/settings" className="block text-xs text-mute hover:text-fg">← Settings · Activity</Link>
+          <Link href="/settings" className="block text-xs text-mute hover:text-fg">Back to Settings</Link>
           <RunsPanel view={one(view)} agent={one(agent)} status={one(status)} />
         </>
       ) : (
@@ -31,66 +35,90 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 }
 
 async function AI({ password }: { password?: string }) {
-  const hasKey = !!(await getSetting("api_key"));
-  const hasOpenAI = !!(await getSetting("openai_key"));
-  const model = await getSetting("model", DEFAULT_MODEL);
-  const theme = parseTheme(await getSetting("theme", "{}"));
-  const genUi = (await getSetting("gen_ui", "on")) !== "off";
   const s = await requireAuth();
-  const admin = s.role === "admin";
+  const [apiKey, openaiKey, githubToken, model, theme, genUi, members] = await Promise.all([
+    getSetting("api_key"),
+    getSetting("openai_key"),
+    getSetting("github_token"),
+    getSetting("model", DEFAULT_MODEL),
+    getSetting("theme", "{}"),
+    getSetting("gen_ui", "on"),
+    s.role === "admin" ? listMembers(s.workspace) : [],
+  ]);
   const env = s.workspace === DEFAULT_WS; // only the first workspace may fall back to the env keys (envKey)
   return (
     <div className="space-y-6">
-      {admin ? (<>
-      <form action={saveSettings} className="space-y-4">
-        <label className="block space-y-1 text-sm">
-          <span>Anthropic API key {hasKey ? <span className="text-mute">(saved — leave blank to keep)</span> : <span className="text-mute">{env ? "(or set ANTHROPIC_API_KEY)" : "(required)"}</span>}</span>
-          <input className="field font-mono" name="api_key" type="password" placeholder="sk-ant-…" autoComplete="off" />
-        </label>
-        <label className="block space-y-1 text-sm">
-          <span>Model</span>
-          <select className="field" name="model" defaultValue={model}>
+      {s.role === "admin" ? (<>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Tile logo={<AnthropicLogo />} name="Anthropic" saved={!!apiKey} fromEnv={env && !!process.env.ANTHROPIC_API_KEY} clear={clearKey.bind(null, "api_key")}>
+          <input className="field font-mono" name="api_key" type="password" placeholder={apiKey ? "Saved. Paste a new key to replace it" : "sk-ant-…"} autoComplete="off" aria-label="Anthropic API key" />
+          <select className="field" name="model" defaultValue={model} aria-label="Model">
             {MODELS.map((m) => <option key={m}>{m}</option>)}
           </select>
-        </label>
-        <label className="block space-y-1 text-sm">
-          <span>OpenAI API key, for searching your Library {hasOpenAI ? <span className="text-mute">(saved — leave blank to keep)</span> : <span className="text-mute">{env ? "(optional, or set OPENAI_API_KEY; keyword search works without it)" : "(optional; keyword search works without it)"}</span>}</span>
-          <input className="field font-mono" name="openai_key" type="password" placeholder="sk-…" autoComplete="off" />
-        </label>
-        <div className="flex gap-2">
-          <button className="btn-solid">Save</button>
-          {hasKey && <button className="btn" formAction={clearKey}>Remove saved key</button>}
-          {hasOpenAI && <button className="btn" formAction={clearOpenAIKey}>Remove OpenAI key</button>}
-        </div>
-      </form>
-      <p className="text-xs text-mute">The keys are encrypted in the database with AUTH_SECRET. Change that secret and you will need to re-enter them.</p>
+        </Tile>
+        <Tile logo={<OpenAILogo />} name="OpenAI" saved={!!openaiKey} fromEnv={env && !!process.env.OPENAI_API_KEY} clear={clearKey.bind(null, "openai_key")}
+          note="Optional. Adds meaning-based search to your Library; document text and queries are sent to OpenAI.">
+          <input className="field font-mono" name="openai_key" type="password" placeholder={openaiKey ? "Saved. Paste a new key to replace it" : "sk-…"} autoComplete="off" aria-label="OpenAI API key" />
+        </Tile>
+        <Tile logo={<GithubLogo />} name="GitHub" saved={!!githubToken} clear={clearKey.bind(null, "github_token")}
+          note="Optional. A read-only token lets Library import docs from private repos. Public repos need none.">
+          <input className="field font-mono" name="github_token" type="password" placeholder={githubToken ? "Saved. Paste a new token to replace it" : "github_pat_…"} autoComplete="off" aria-label="GitHub token" />
+        </Tile>
+      </div>
       <form action={saveGenUi} className="flex items-center justify-between gap-4 text-sm">
         <span>
-          Generative UI <span className="chip ml-1 border-accent">Beta</span>
+          Generative UI
           <span className="mt-0.5 block text-xs text-mute">Answers as cards, options, maps and other interactive views. Off: plain text.</span>
         </span>
         <div className="seg shrink-0">
           {(["on", "off"] as const).map((v) => (
-            <button key={v} name="gen_ui" value={v} aria-pressed={genUi === (v === "on")} className="capitalize">{v}</button>
+            <button key={v} name="gen_ui" value={v} aria-pressed={(genUi !== "off") === (v === "on")} className="capitalize">{v}</button>
           ))}
         </div>
       </form>
       <section className="space-y-3 border-t border-line pt-6">
         <h2 className="text-sm">Members</h2>
-        <Members members={await listMembers(s.workspace)} me={s.uid} />
+        <Members members={members} me={s.uid} />
       </section>
       </>) : (
         <p className="text-sm text-mute">Model: {model}. API keys, Generative UI and connections are managed by a workspace admin.</p>
       )}
       <form action={saveTheme} className="flex items-center justify-between text-sm">
         <span>Appearance</span>
-        <div className="seg">
-          {(["system", "light", "dark"] as const).map((m) => (
-            <button key={m} name="mode" value={m} aria-pressed={theme.mode === m} className="capitalize">{m}</button>
-          ))}
-        </div>
+        <ThemeSwitch mode={parseTheme(theme).mode} />
       </form>
       <Account password={password} />
+    </div>
+  );
+}
+
+/** An integration: its mark, whether it's connected, and a dialog holding its key. */
+function Tile({ logo, name, saved, fromEnv, clear, note, children }: { logo: React.ReactNode; name: string; saved: boolean; fromEnv?: boolean; clear: () => Promise<void>; note?: string; children: React.ReactNode }) {
+  const on = saved || fromEnv;
+  return (
+    <div className="card flex flex-col gap-5 !p-4">
+      <div className="flex items-center gap-3">
+        {logo}
+        <span className="text-sm font-medium">{name}</span>
+      </div>
+      <div className="mt-auto flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-xs text-mute">
+          <span className={`size-1.5 rounded-full ${on ? "bg-accent" : "bg-line"}`} />
+          {on ? "Connected" : "Not set"}
+        </span>
+        <Dialog label={on ? "Manage" : "Set up"} title={name} className={on ? "btn !py-1 text-xs" : "btn-solid !py-1 text-xs"}>
+          <form action={saveSettings} className="space-y-3">
+            {children}
+            {note && <p className="text-xs text-mute">{note}</p>}
+            {fromEnv && !saved && <p className="text-xs text-mute">Using the key from the server environment. A key saved here takes precedence.</p>}
+            <p className="text-xs text-mute">Saved encrypted with AUTH_SECRET; change that secret and you&apos;ll need to enter it again.</p>
+            <div className="flex gap-2">
+              <Submit className="btn-solid">Save</Submit>
+              {saved && <Submit className="btn" formAction={clear} formNoValidate>Remove</Submit>}
+            </div>
+          </form>
+        </Dialog>
+      </div>
     </div>
   );
 }
@@ -112,19 +140,19 @@ function Account({ password }: { password?: string }) {
           <input className="field" name="new" type="password" placeholder="New password" autoComplete="new-password" minLength={MIN_PASSWORD} required aria-label="New password" />
           <input className="field" name="confirm" type="password" placeholder="New password, again" autoComplete="new-password" minLength={MIN_PASSWORD} required aria-label="Confirm new password" />
           {password && PASSWORD_MESSAGES[password] && <p role="status">{PASSWORD_MESSAGES[password]}</p>}
-          <button className="btn-solid">Change password</button>
+          <Submit className="btn-solid">Change password</Submit>
         </form>
       </details>
-      <Link href="/settings?tab=runs" className="block text-sm text-mute hover:text-fg">Activity →</Link>
+      <Link href="/settings?tab=runs" className="block text-sm text-mute hover:text-fg">Activity</Link>
       <div className="flex flex-wrap gap-2">
       <details className="relative">
         <summary className="btn cursor-pointer list-none [&::-webkit-details-marker]:hidden">Delete all chats</summary>
         <form action={clearThreads} className="absolute left-0 z-10 mt-2 w-56 space-y-2 rounded-md border border-line glass p-3 shadow-lg text-sm">
           <p className="text-mute">Every conversation of yours is deleted. Runs are kept.</p>
-          <button className="btn-solid">Yes, delete all</button>
+          <Submit className="btn-solid">Yes, delete all</Submit>
         </form>
       </details>
-      <form action={logout}><button className="btn">Sign out</button></form>
+      <form action={logout}><Submit className="btn">Sign out</Submit></form>
       </div>
     </div>
   );

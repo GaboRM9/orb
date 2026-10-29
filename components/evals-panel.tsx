@@ -4,7 +4,7 @@ import { getSetting, listAgents } from "@/lib/db";
 import { GRADER_MODEL, listCases, listEvalRuns, MAX_CASES, newlyFailing, runResults, type EvalCase, type EvalResult, type EvalRun } from "@/lib/evals";
 import { DEFAULT_MODEL, MODELS } from "@/lib/models";
 import { toolInfo, toolNames } from "@/lib/tools";
-import { RunEvalButton } from "./run-eval-button";
+import { Submit } from "./submit";
 import { Spark } from "./surfaces/spark";
 
 const pct = (r: EvalRun) => Math.round((r.passed / r.total) * 100);
@@ -26,10 +26,7 @@ export async function EvalsPanel({ agent: agentId, run: runId, edit, error }: { 
 
   return (
     <div className="space-y-8">
-      <p className="text-xs text-mute">
-        Test questions for each agent, with what a good answer looks like. A run asks the agent every question the way chat would, and a grader model
-        passes or fails each answer. Run it after changing an agent&apos;s instructions, tools or model to see what got better or worse.
-      </p>
+      <p className="text-xs text-mute">Test questions per agent; a grader model passes or fails each answer. Run after changing an agent to see what got better or worse.</p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {agents.map((a) => {
@@ -66,7 +63,7 @@ export async function EvalsPanel({ agent: agentId, run: runId, edit, error }: { 
               <option value="">{agent.model || workspaceModel}</option>
               {MODELS.filter((m) => m !== (agent.model || workspaceModel)).map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
-            <RunEvalButton disabled={!cases.length} />
+            <Submit className="btn-solid" disabled={!cases.length} pendingText="Running… (up to a few minutes)">Run evals</Submit>
           </form>
         </div>
         {error && <p role="alert" className="rounded-lg border border-accent p-3 text-sm">{error}</p>}
@@ -161,7 +158,7 @@ function Cases({ agent, cases, edit }: { agent: string; cases: EvalCase[]; edit?
               </div>
               <div className="flex shrink-0 gap-2">
                 <Link href={href({ agent, edit: c.id })} scroll={false} className="btn text-xs">Edit</Link>
-                <form action={deleteEvalCase.bind(null, c.id, agent)}><button className="btn text-xs">Delete</button></form>
+                <form action={deleteEvalCase.bind(null, c.id, agent)}><Submit className="btn text-xs">Delete</Submit></form>
               </div>
             </div>
           ))}
@@ -179,7 +176,7 @@ function Cases({ agent, cases, edit }: { agent: string; cases: EvalCase[]; edit?
             {toolNames.map((t) => <option key={t} value={t}>Must use: {toolInfo[t].label}</option>)}
           </select>
           <div className="flex items-center gap-2">
-            <button className="btn-solid">{editing ? "Save" : "Add"}</button>
+            <Submit className="btn-solid">{editing ? "Save" : "Add"}</Submit>
             {editing && <Link href={href({ agent })} scroll={false} className="text-xs text-mute hover:text-fg">Cancel</Link>}
           </div>
         </form>

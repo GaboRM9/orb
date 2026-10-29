@@ -1,13 +1,14 @@
 import { deleteAgent, saveAgent } from "@/lib/actions";
 import { isAdmin, listMcp, listSkills, type Agent } from "@/lib/db";
 import { MODELS } from "@/lib/models";
+import { Submit } from "./submit";
 import { DEFAULT_TOOLS, toolInfo, toolNames } from "@/lib/tools";
 
 export async function AgentForm({ agent }: { agent?: Agent }) {
   const tools: string[] = agent ? JSON.parse(agent.tools_json) : [];
   const skills: string[] = agent ? JSON.parse(agent.skills_json) : [];
   const mcp: string[] = agent ? JSON.parse(agent.mcp_json) : [];
-  const [servers, admin] = await Promise.all([listMcp(), isAdmin()]);
+  const [servers, admin, allSkills] = await Promise.all([listMcp(), isAdmin(), listSkills()]);
   return (
     <form action={saveAgent} className="space-y-10">
       {agent && <input type="hidden" name="id" value={agent.id} />}
@@ -29,10 +30,10 @@ export async function AgentForm({ agent }: { agent?: Agent }) {
               </label>
             ))}
           </fieldset>
-          {(await listSkills()).length > 0 && (
+          {allSkills.length > 0 && (
             <fieldset className="space-y-2 text-sm">
               <legend className="mb-2 text-mute">Skills</legend>
-              {(await listSkills()).map((k) => (
+              {allSkills.map((k) => (
                 <label key={k.id} className="mr-4 inline-flex items-center gap-2 text-sm">
                   <input type="checkbox" name="skills" value={k.name} defaultChecked={skills.includes(k.name)} className="accent-current" /> {k.name}
                 </label>
@@ -65,14 +66,14 @@ export async function AgentForm({ agent }: { agent?: Agent }) {
         </div>
       </details>
       <div className="sticky bottom-0 border-t border-line glass py-4">
-        <button className="btn-solid">Save</button>
+        <Submit className="btn-solid">Save</Submit>
       </div>
       {agent && (
         <details className="border-t border-line pt-6 text-sm">
           <summary className="cursor-pointer text-mute hover:text-fg">Danger zone</summary>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
             <p className="text-mute">Deleting removes this agent. Its conversations stay in the sidebar.</p>
-            <button className="btn shrink-0" formAction={deleteAgent.bind(null, agent.id)} formNoValidate>Delete agent</button>
+            <Submit className="btn shrink-0" formAction={deleteAgent.bind(null, agent.id)} formNoValidate>Delete agent</Submit>
           </div>
         </details>
       )}
