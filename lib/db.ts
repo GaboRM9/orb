@@ -100,6 +100,14 @@ async function init() {
     create index if not exists runs_started on runs(started desc);
     create table if not exists login_misses (t integer not null);
     create table if not exists stops (thread_id text primary key, at integer not null);
+    create table if not exists eval_cases (
+      id integer primary key autoincrement, workspace_id text not null, agent_id text not null,
+      prompt text not null, expect text not null, tool text);
+    create table if not exists eval_results (
+      id integer primary key autoincrement, workspace_id text not null, user_id text, run_id text not null, agent_id text not null,
+      case_id integer not null, prompt text not null, model text not null, started integer not null,
+      pass integer not null, reason text not null, answer text not null, ms integer not null, cost real);
+    create index if not exists eval_results_agent on eval_results(workspace_id, agent_id, started desc);
   `);
   const cols = async (table: string) => ((await all(c, `pragma table_info(${table})`, [])) as { name: string }[]).map((x) => x.name);
   for (const [table, col, ddl] of [
@@ -120,6 +128,7 @@ async function init() {
     ["threads", "user_id", "text"],
     ["runs", "user_id", "text"],
     ["approvals", "user_id", "text"],
+    ["eval_results", "user_id", "text"],
   ])
     if (!(await cols(table)).includes(col)) await c.execute(`alter table ${table} add column ${col} ${ddl}`).catch(() => {}); // lost a race: the column exists now
   // single-tenant databases: rebuild with workspace-scoped unique keys; every existing row lands in the first workspace.

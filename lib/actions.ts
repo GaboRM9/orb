@@ -7,6 +7,7 @@ import { seal } from "./secret";
 import { importGithub } from "./github";
 import { addDoc, deleteDoc, deleteFolder, embedMissing } from "./knowledge";
 import { clearMcpAllowed, probeMcp, serverForTool, setMcpAllowed } from "./mcp";
+import { listCases, MAX_CASES, runEval } from "./evals";
 import type { McpServer } from "./db";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -110,6 +111,7 @@ export async function deleteAgent(id: string) {
   const w = await ws();
   await db.prepare("update threads set agent_id=null where agent_id=? and workspace_id=?").run(id, w);
   await db.prepare("delete from agents where id=? and workspace_id=?").run(id, w);
+  await db.batch([["delete from eval_cases where agent_id=? and workspace_id=?", id, w], ["delete from eval_results where agent_id=? and workspace_id=?", id, w]]);
   revalidatePath("/", "layout");
   redirect("/agents");
 }
@@ -272,4 +274,30 @@ export async function resetPassword(uid: string): Promise<MemberResult> {
   const { workspace } = await requireAdmin();
   const r = await resetMemberPassword(workspace, uid);
   return "error" in r ? { ok: false, text: r.error } : { ok: true, text: "New password set and their sessions signed out. Send it to them; it won't be shown again.", password: r.password };
+}
+
+// Evals (Library → Evals) are admin-only: a run spends the workspace's tokens.
+export async function saveEvalCase(f: FormData) {
+  await requireAdmin();
+  const [id, agent, prompt, expect, tool] = [Number(f.get("id")) || null, s(f, "agent"), s(f, "prompt"), s(f, "expect"), s(f, "tool") || null];
+  if (!prompt || !expect || !(await getAgent(agent))) return;
+  if (id) await db.prepare("update eval_cases set prompt=?, expect=?, tool=? where id=? and workspace_id=?").run(prompt, expect, tool, id, await ws());
+  else if ((await listCases(agent)).length < MAX_CASES)
+    await db.prepare("insert into eval_cases (workspace_id,agent_id,prompt,expect,tool) values (?,?,?,?,?)").run(await ws(), agent, prompt, expect, tool);
+  revalidatePath("/library");
+  redirect(`/library?tab=evals&agent=${agent}`);
+}
+
+export async function deleteEvalCase(id: number, agent: string) {
+  await requireAdmin();
+  await db.prepare("delete from eval_cases where id=? and workspace_id=?").run(id, await ws());
+  revalidatePath("/library");
+  redirect(`/library?tab=evals&agent=${agent}`);
+}
+
+export async function runEvalAction(agent: string, f: FormData) {
+  await requireAdmin();
+  const r = await runEval(agent, s(f, "model"));
+  revalidatePath("/library");
+  redirect(`/library?${new URLSearchParams({ tab: "evals", agent, ...(typeof r === "string" ? { run: r } : r) })}`);
 }

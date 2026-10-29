@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { attachMcp, deleteKnowledgeDoc, deleteKnowledgeFolder, deleteMcp, revokeMcpTool, deleteSkill, embedKnowledge, saveMcp, saveSkill, toggleMcp, toggleSkill } from "@/lib/actions";
 import { GithubImport, KnowledgeUpload } from "@/components/knowledge-upload";
+import { EvalsPanel } from "@/components/evals-panel";
 import { McpTest } from "@/components/mcp-test";
 import { hasEmbeddingKey, listDocs, staleChunks, type Doc } from "@/lib/knowledge";
 import { isAdmin, listAgents, listMcp, listSkills, type McpServer } from "@/lib/db";
@@ -9,18 +10,20 @@ import { toolInfo, toolNames } from "@/lib/tools";
 
 export const dynamic = "force-dynamic";
 
-const tabs = [["knowledge", "Knowledge"], ["skills", "Skills"], ["connections", "Connections"]] as const;
+const tabs = [["knowledge", "Knowledge"], ["skills", "Skills"], ["connections", "Connections"], ["evals", "Evals"]] as const;
 
 export default async function LibraryPage({ searchParams }: PageProps<"/library">) {
-  const { tab, skill, new: isNew } = await searchParams;
+  const { tab, skill, new: isNew, agent, run, edit, error } = await searchParams;
   const one = (v: unknown) => (typeof v === "string" && v ? v : undefined);
-  const active = tabs.find(([k]) => k === tab)?.[0] ?? "knowledge";
+  const admin = await isAdmin();
+  const shown = tabs.filter(([k]) => admin || k !== "evals"); // evals spend the workspace's tokens: admins only
+  const active = shown.find(([k]) => k === tab)?.[0] ?? "knowledge";
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Library</h1>
       <p className="text-sm text-mute">What your agents can know and use.</p>
       <nav className="seg">
-        {tabs.map(([k, label]) => (
+        {shown.map(([k, label]) => (
           <Link key={k} href={`/library?tab=${k}`}
             aria-current={active === k ? "page" : undefined}>
             {label}
@@ -30,6 +33,7 @@ export default async function LibraryPage({ searchParams }: PageProps<"/library"
       {active === "knowledge" && <Knowledge />}
       {active === "skills" && <Skills skill={one(skill)} isNew={one(isNew)} />}
       {active === "connections" && <Connections />}
+      {active === "evals" && <EvalsPanel agent={one(agent)} run={one(run)} edit={one(edit)} error={one(error)} />}
     </div>
   );
 }
