@@ -3,6 +3,9 @@ import { attachMcp, deleteKnowledgeDoc, deleteKnowledgeFolder, deleteMcp, revoke
 import { GithubImport, KnowledgeUpload } from "@/components/knowledge-upload";
 import { EvalsPanel } from "@/components/evals-panel";
 import { McpTest } from "@/components/mcp-test";
+import { Dialog } from "@/components/dialog";
+import { Submit } from "@/components/submit";
+import { FolderIcon, GithubLogo, PlusIcon } from "@/components/icons";
 import { hasEmbeddingKey, listDocs, staleChunks, type Doc } from "@/lib/knowledge";
 import { isAdmin, listAgents, listMcp, listSkills, type McpServer } from "@/lib/db";
 import { allowedMcp, mcpToolName } from "@/lib/mcp";
@@ -21,7 +24,6 @@ export default async function LibraryPage({ searchParams }: PageProps<"/library"
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-14 md:px-10">
       <h1>Library</h1>
-      <p className="text-sm text-mute">What your agents can know and use.</p>
       <nav className="seg">
         {shown.map(([k, label]) => (
           <Link key={k} href={`/library?tab=${k}`}
@@ -56,8 +58,8 @@ function Folder({ node, prefix }: { node: Node; prefix: string }) {
       {[...node.dirs].map(([name, child]) => (
         <details key={name} open className="rounded-lg border border-line px-4 py-2">
           <summary className="flex cursor-pointer items-center justify-between gap-2 text-sm font-medium">
-            <span>📁 {name}</span>
-            <button className="btn text-xs" formAction={deleteKnowledgeFolder.bind(null, prefix + name)}>Delete folder</button>
+            <span className="flex items-center gap-2"><FolderIcon className="h-4 w-4 text-mute" />{name}</span>
+            <Submit className="btn text-xs" formAction={deleteKnowledgeFolder.bind(null, prefix + name)}>Delete folder</Submit>
           </summary>
           <div className="mt-1 ml-3"><Folder node={child} prefix={`${prefix}${name}/`} /></div>
         </details>
@@ -65,7 +67,7 @@ function Folder({ node, prefix }: { node: Node; prefix: string }) {
       {node.docs.map((d) => (
         <div key={d.id} className="flex items-center justify-between gap-2 py-0.5 text-sm">
           <span className="min-w-0 truncate">{d.title} <span className="text-xs text-mute">· {d.chunks} chunks · {d.source}{d.source_ref && ` · ${d.source_ref}`}</span></span>
-          <button className="btn text-xs" formAction={deleteKnowledgeDoc.bind(null, d.id)}>Delete</button>
+          <Submit className="btn text-xs" formAction={deleteKnowledgeDoc.bind(null, d.id)}>Delete</Submit>
         </div>
       ))}
     </div>
@@ -78,18 +80,18 @@ async function Knowledge() {
   const canEmbed = await hasEmbeddingKey();
   return (
     <div className="space-y-4">
-      <p className="text-xs text-mute">
-        Documents agents can search (agents with &ldquo;Search your knowledge&rdquo; on). Search combines keywords with OpenAI embeddings when an OpenAI key is set in Settings. With a key, document text and search queries are sent to OpenAI.
-      </p>
+      <p className="text-xs text-mute">Documents your agents can search when &ldquo;Search your knowledge&rdquo; is on.</p>
       {stale > 0 && (
         <form action={embedKnowledge} className="flex items-center gap-3 text-sm">
           <span className="text-mute">{stale} chunks have no embedding{canEmbed ? "" : " (add an OpenAI key first)"}; they are still found by keyword.</span>
-          {canEmbed && <button className="btn text-xs">Embed now</button>}
+          {canEmbed && <Submit className="btn text-xs" pendingText="Embedding…">Embed now</Submit>}
         </form>
       )}
       <form>{docs.length ? <Folder node={tree(docs)} prefix="" /> : <p className="text-sm text-mute">Nothing here yet.</p>}</form>
       <KnowledgeUpload />
-      <GithubImport />
+      <Dialog label={<><GithubLogo className="h-4 w-4" />Import from GitHub</>} title="Import from GitHub" className="btn inline-flex items-center gap-2">
+        <GithubImport />
+      </Dialog>
     </div>
   );
 }
@@ -113,9 +115,9 @@ function SkillForm({ cur }: { cur?: Skill }) {
         ))}
       </fieldset>
       <div className="flex items-center gap-2">
-        <button className="btn-solid">Save</button>
-        {cur && <button className="btn" formAction={toggleSkill.bind(null, cur.id)} formNoValidate>{cur.enabled ? "Disable" : "Enable"}</button>}
-        {cur && <button className="btn" formAction={deleteSkill.bind(null, cur.id)} formNoValidate>Delete</button>}
+        <Submit className="btn-solid">Save</Submit>
+        {cur && <Submit className="btn" formAction={toggleSkill.bind(null, cur.id)} formNoValidate>{cur.enabled ? "Disable" : "Enable"}</Submit>}
+        {cur && <Submit className="btn" formAction={deleteSkill.bind(null, cur.id)} formNoValidate>Delete</Submit>}
         <Link href="/library?tab=skills" className="ml-auto text-xs text-mute hover:text-fg">Close</Link>
       </div>
     </form>
@@ -143,7 +145,7 @@ async function Skills({ skill, isNew }: { skill?: string; isNew?: string }) {
           );
         })}
       </div>
-      {isNew ? <SkillForm /> : <Link href="/library?tab=skills&new=1" className="inline-block text-sm text-mute hover:text-fg">+ New skill</Link>}
+      {isNew ? <SkillForm /> : <Link href="/library?tab=skills&new=1" className="btn inline-flex items-center gap-2"><PlusIcon />New skill</Link>}
     </div>
   );
 }
@@ -153,8 +155,7 @@ async function Connections() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-mute">
-        Remote tool servers (Streamable HTTP). A server does nothing until it&apos;s attached to an agent. Every call to its tools asks for your approval in the chat, unless you chose Always allow for that tool.
-        Credentials are encrypted in the database.{!admin && " Only a workspace admin can add, change or attach servers."}
+        Remote MCP servers. Attach one to an agent to use it; each tool call asks for your approval unless you chose Always allow.{!admin && " A workspace admin adds and attaches them."}
       </p>
       {servers.map((m) => (
         <div key={m.id} className="space-y-2 card">
@@ -164,8 +165,8 @@ async function Connections() {
               <div className="truncate font-mono text-xs text-mute">{m.url}{m.headers_json !== "{}" && " · auth header set"}</div>
             </div>
             {admin && <div className="flex gap-2">
-              <form action={toggleMcp.bind(null, m.id)}><button className={m.enabled ? "btn-solid text-xs" : "btn text-xs"}>{m.enabled ? "On" : "Off"}</button></form>
-              <form action={deleteMcp.bind(null, m.id)}><button className="btn text-xs">Delete</button></form>
+              <form action={toggleMcp.bind(null, m.id)}><Submit className={m.enabled ? "btn-solid text-xs" : "btn text-xs"}>{m.enabled ? "On" : "Off"}</Submit></form>
+              <form action={deleteMcp.bind(null, m.id)}><Submit className="btn text-xs">Delete</Submit></form>
             </div>}
           </div>
           <McpUse server={m} agents={agents} allowed={allowed} admin={admin} />
@@ -177,7 +178,7 @@ async function Connections() {
         <input className="field" name="name" placeholder="Name (e.g. docs)" required />
         <input className="field font-mono" name="url" placeholder="https://example.com/mcp" required />
         <input className="field font-mono" name="auth" type="password" placeholder="Authorization header value (optional), e.g. Bearer …" autoComplete="off" />
-        <button className="btn-solid">Add</button>
+        <Submit className="btn-solid">Add</Submit>
       </form>}
     </div>
   );
@@ -195,7 +196,7 @@ function McpUse({ server, agents, allowed, admin }: { server: McpServer; agents:
         <span className={using.length ? "text-mute" : ""}>{using.length ? `Used by ${using.map((a) => a.name).join(", ")}` : "Not attached to any agent yet, so no chat can use it."}</span>
         {admin && others.map((a) => (
           <form key={a.id} action={attachMcp.bind(null, server.id, a.id)}>
-            <button className={`${!using.length && a.id === "assistant" ? "btn-solid" : "btn"} !py-1 text-xs`}>Attach to {a.name}</button>
+            <Submit className={`${!using.length && a.id === "assistant" ? "btn-solid" : "btn"} !py-1 text-xs`}>Attach to {a.name}</Submit>
           </form>
         ))}
       </div>
@@ -205,7 +206,7 @@ function McpUse({ server, agents, allowed, admin }: { server: McpServer; agents:
           {always.map((t) => (
             <form key={t} action={revokeMcpTool.bind(null, server.id, t)} className="chip inline-flex items-center gap-1.5">
               <span className="font-mono">{t.startsWith(prefix) ? t.slice(prefix.length) : t}</span>
-              {admin && <button className="text-mute hover:text-fg" title="Ask before every call again">Ask again</button>}
+              {admin && <Submit className="text-mute hover:text-fg disabled:opacity-40" title="Ask before every call again">Ask again</Submit>}
             </form>
           ))}
         </div>

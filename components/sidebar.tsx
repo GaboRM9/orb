@@ -1,8 +1,10 @@
 "use client";
+import { generateId } from "ai";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { deleteThread } from "@/lib/actions";
+import { Submit } from "./submit";
 import { BookIcon, BotIcon, GearIcon, MenuIcon, OrbIcon, PanelLeftIcon, PlusIcon, XIcon } from "./icons";
 
 type Thread = { id: string; title: string };
@@ -28,6 +30,7 @@ const toggleCollapsed = () => {
 // The collapsed classes are md-only so the drawer always shows labels.
 export function Sidebar({ threads }: { threads: Thread[] }) {
   const path = usePathname();
+  const router = useRouter();
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false);
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
@@ -54,8 +57,8 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
         className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col overflow-hidden border-r border-line bg-surface p-5 transition-[transform,visibility] duration-200 md:static md:z-auto md:shrink-0 md:translate-x-0 md:transition-[width] ${open ? "translate-x-0" : "invisible -translate-x-full md:visible"} ${collapsed ? "md:w-16 md:p-3" : ""}`}
       >
         <div className={`mb-6 px-3 ${collapsed ? "md:flex md:justify-center md:px-0" : ""}`}><OrbIcon className="h-7 w-7" label="orb" /></div>
-        {/* prefetch off: "/" redirects to a fresh chat id, which must not be cached and reused */}
-        <Link href="/" prefetch={false} onClick={close} aria-label="New chat" title="New chat" className={`btn flex items-center gap-3 !px-3 text-sm ${rail}`}>
+        {/* the fresh id is made here, on click, so it is never cached and reused, and there's no redirect through "/" */}
+        <Link href="/" prefetch={false} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; /* new tab: "/" redirects there */ e.preventDefault(); close(); router.push(`/chat/${generateId()}`); }} aria-label="New chat" title="New chat" className={`btn flex items-center gap-3 !px-3 text-sm ${rail}`}>
           <PlusIcon className="h-5 w-5" /><span className={hideWhenCollapsed}>New chat</span>
         </Link>
         <div className={`mt-6 flex min-h-0 flex-1 flex-col gap-0.5 ${hideWhenCollapsed}`}>
@@ -69,7 +72,7 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
                     {t.title || "Untitled"}
                   </Link>
                   <form action={deleteThread.bind(null, t.id, here ? "/" : path)} className={`absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 text-mute hover:text-fg`}>
-                    <button aria-label={`Delete ${t.title || "chat"}`} className="grid h-6 w-6 place-items-center rounded-ctl text-current hover:bg-hover"><XIcon className="h-3.5 w-3.5" /></button>
+                    <Submit aria-label={`Delete ${t.title || "chat"}`} className="grid h-6 w-6 place-items-center rounded-ctl text-current hover:bg-hover disabled:opacity-40"><XIcon className="h-3.5 w-3.5" /></Submit>
                   </form>
                 </div>
               );

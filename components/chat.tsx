@@ -75,6 +75,18 @@ const asAttachment = (f: File) => (f.type.startsWith("text/") || (!f.type && TEX
 // chat id → toolCallId → what that surface shows now (set when the user changes it, sent with the next message)
 const surfaceStates = new Map<string, Record<string, string>>();
 
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      onClick={() => navigator.clipboard?.writeText(text).then(() => (setDone(true), setTimeout(() => setDone(false), 1200))).catch(() => {})}
+      className="text-xs text-mute opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
+    >
+      {done ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent; canAlwaysAllow?: boolean }) {
   const router = useRouter();
   const agentId = agent?.id;
@@ -104,6 +116,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
     if (picker.current) picker.current.value = "";
   };
   const end = useRef<HTMLDivElement>(null);
+  const stick = useRef(true); // follow the stream only while you're at the bottom; scrolling up to read stops it
   const box = useRef<HTMLTextAreaElement>(null);
   const { messages, sendMessage, addToolOutput, addToolApprovalResponse, status, error, stop } = useChat<ChatMessage>({
     id,
@@ -120,7 +133,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
   const greeting = greetingFor(id);
 
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "end" });
+    if (stick.current) end.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
   // grow the composer with its text; max-h on the textarea caps it
@@ -135,7 +148,10 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
     // an empty chat sits in the middle of the screen: the agent opens with a greeting turn and the composer right under it.
     // The first message drops the centering, so the composer settles at the bottom and the thread grows above it.
     <div className={`mx-auto flex h-full max-w-3xl flex-col px-6 ${empty ? "justify-center pb-[12vh]" : ""}`}>
-      <div className={`space-y-7 overflow-y-auto ${empty ? "pb-6" : "flex-1 py-8"}`}>
+      <div
+        className={`space-y-7 overflow-y-auto ${empty ? "pb-6" : "flex-1 py-8"}`}
+        onScroll={(e) => { const t = e.currentTarget; stick.current = t.scrollHeight - t.scrollTop - t.clientHeight < 80; }}
+      >
         {empty && (
           <div className="turn turn-agent rise">
             <div className="mb-1 text-xs text-mute">{name}</div>
@@ -210,14 +226,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
                   flush(m.parts.length);
                   return blocks;
                 })()}
-                {m.role === "assistant" && text && (
-                  <button
-                    onClick={() => navigator.clipboard?.writeText(text).catch(() => {})}
-                    className="text-xs text-mute opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
-                  >
-                    Copy
-                  </button>
-                )}
+                {m.role === "assistant" && text && <CopyButton text={text} />}
               </div>
             </div>
           );
@@ -242,6 +251,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
             if ((!input.trim() && !files.length) || busy) return;
             const dt = new DataTransfer();
             files.forEach((f) => dt.items.add(f));
+            stick.current = true; // your own message always brings you back down
             sendMessage(input.trim() ? { text: input, files: dt.files } : { files: dt.files });
             setInput("");
             setFiles([]);
