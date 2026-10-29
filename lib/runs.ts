@@ -28,7 +28,7 @@ export async function logRun(r: {
  */
 export const activityOf = async () => ((await isAdmin()) ? null : await me());
 
-/** Headline numbers for the Runs tab: runs today, errors today, approvals waiting on a decision, dollars spent today. */
+/** Headline numbers for the Runs tab: runs today, errors today, approvals waiting on a decision, dollars spent today (chat and evals). */
 export const runSummary = async (user: string | null) => {
   const today = new Date().setHours(0, 0, 0, 0);
   const mine = "workspace_id = @w and (@u is null or user_id = @u)";
@@ -36,12 +36,21 @@ export const runSummary = async (user: string | null) => {
     `select (select count(*) from runs where ${mine} and started >= @t) runs,
             (select count(*) from runs where ${mine} and started >= @t and status = 'error') errors,
             (select count(*) from approvals where ${mine} and decision = 'pending') pending,
-            (select coalesce(sum(cost), 0) from runs where ${mine} and started >= @t) spent`,
+            (select coalesce(sum(cost), 0) from runs where ${mine} and started >= @t)
+              + (select coalesce(sum(cost), 0) from eval_results where ${mine} and started >= @t) spent`,
   ).get({ w: await ws(), u: user, t: today })) as { runs: number; errors: number; pending: number; spent: number };
 };
 
 /** Dollars spent since local midnight by the whole workspace (null, for DAILY_BUDGET_USD) or one member (USER_DAILY_BUDGET_USD). */
 export const spentToday = async (user: string | null = null) => (await runSummary(user)).spent;
+
+/** Why a new chat turn or eval run can't start: the workspace's or this member's daily budget is used up. Null when it can. */
+export async function budgetError(uid: string) {
+  const [all, mine] = [Number(process.env.DAILY_BUDGET_USD) || 0, Number(process.env.USER_DAILY_BUDGET_USD) || 0];
+  if (all && (await spentToday()) >= all) return `Today's budget of $${all} is used up. It resets at midnight.`;
+  if (mine && (await spentToday(uid)) >= mine) return `Your budget of $${mine} for today is used up. It resets at midnight.`;
+  return null;
+}
 
 // Stop button: the click may land on a different serverless instance than the run, so it goes through the database.
 // The thread row may not exist yet (it's saved when the first turn ends), so the stop carries the workspace instead.
