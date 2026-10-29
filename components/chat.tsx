@@ -5,11 +5,13 @@ import { renderUiPart, type ChatMessage } from "./gen-ui";
 import { alwaysAllowMcpTool } from "@/lib/actions";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpIcon, PaperclipIcon, StopIcon, XIcon } from "./icons";
 import { FILE_TYPES, MAX_FILE_BYTES } from "@/lib/files";
 
 type ChatAgent = { id: string; name: string; description: string };
+/** What a multiplex pane shows about its chat: working, waiting on you (approval or form), or idle, plus the last reply line. */
+export type PaneStatus = { state: "idle" | "working" | "needs"; snippet: string };
 
 // plain-language labels for built-in tools; anything else (MCP tools) shows its own name
 // the opening line of an empty chat; picked from the chat id so server and client render the same one
@@ -72,6 +74,9 @@ function ToolRun({ parts }: { parts: ToolPart[] }) {
 const TEXTISH = /\.(md|mdx|txt|csv|json|ya?ml|log)$/i;
 const asAttachment = (f: File) => (f.type.startsWith("text/") || (!f.type && TEXTISH.test(f.name)) ? new File([f], f.name, { type: "text/plain" }) : f);
 
+// chat id → text its composer opens with (a delegated pane's brief), until it's sent
+export const drafts = new Map<string, string>();
+
 // chat id → toolCallId → what that surface shows now (set when the user changes it, sent with the next message)
 const surfaceStates = new Map<string, Record<string, string>>();
 
@@ -87,7 +92,11 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: string; initialMessages: ChatMessage[]; agent?: ChatAgent; canAlwaysAllow?: boolean }) {
+export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, onStatus }: {
+  id: string; initialMessages: ChatMessage[]; agent?: ChatAgent; canAlwaysAllow?: boolean;
+  compact?: boolean; // a multiplex pane: tighter, no starters, doesn't grab focus
+  onStatus?: (s: PaneStatus) => void;
+}) {
   const router = useRouter();
   const agentId = agent?.id;
   const transport = useMemo(
@@ -100,7 +109,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
       }),
     [agentId],
   );
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => drafts.get(id) ?? "");
   const [files, setFiles] = useState<File[]>([]);
   const [fileMsg, setFileMsg] = useState("");
   const picker = useRef<HTMLInputElement>(null);
@@ -124,13 +133,18 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
     transport,
     // resume after a form/choice answer or an approve/deny click
     sendAutomaticallyWhen: (o) => lastAssistantMessageIsCompleteWithToolCalls(o) || lastAssistantMessageIsCompleteWithApprovalResponses(o),
-    onFinish: () => router.refresh(), // refresh thread list
+    // ponytail: panes skip it, or 10 finishing panes re-render the whole grid 10 times; the sidebar catches up on the next navigation
+    onFinish: compact ? undefined : () => router.refresh(), // refresh thread list
   });
   const busy = status === "submitted" || status === "streaming";
   const last = messages[messages.length - 1];
   const name = agent?.name ?? "orb";
   const empty = !messages.length;
   const greeting = greetingFor(id);
+  const waiting = !busy && last?.role === "assistant" && last.parts.some((p) => isToolUIPart(p) && (p.state === "approval-requested" || p.state === "input-available"));
+  const snippet = last?.role === "assistant" ? (last.parts.findLast((p) => p.type === "text")?.text ?? "").slice(-140) : "";
+  const report = useEffectEvent((s: PaneStatus) => onStatus?.(s));
+  useEffect(() => report({ state: busy ? "working" : waiting ? "needs" : "idle", snippet }), [busy, waiting, snippet]);
 
   useEffect(() => {
     if (stick.current) end.current?.scrollIntoView({ block: "end" });
@@ -147,17 +161,17 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
   return (
     // an empty chat sits in the middle of the screen: the agent opens with a greeting turn and the composer right under it.
     // The first message drops the centering, so the composer settles at the bottom and the thread grows above it.
-    <div className={`mx-auto flex h-full max-w-3xl flex-col px-6 ${empty ? "justify-center pb-[12vh]" : ""}`}>
+    <div className={`mx-auto flex h-full max-w-3xl flex-col ${compact ? "px-4" : "px-6"} ${empty ? "justify-center pb-[12vh]" : ""}`}>
       <div
-        className={`space-y-7 overflow-y-auto ${empty ? "pb-6" : "flex-1 py-8"}`}
+        className={`space-y-7 overflow-y-auto ${empty ? "pb-6" : `flex-1 ${compact ? "py-4" : "py-8"}`}`}
         onScroll={(e) => { const t = e.currentTarget; stick.current = t.scrollHeight - t.scrollTop - t.clientHeight < 80; }}
       >
         {empty && (
           <div className="turn turn-agent rise">
             <div className="mb-1 text-xs text-mute">{name}</div>
-            <p className="text-2xl font-light tracking-tight">{greeting}</p>
+            <p className={`${compact ? "text-lg" : "text-2xl"} font-light tracking-tight`}>{greeting}</p>
             {agent?.description && <p className="mt-1 text-sm text-mute">{agent.description}</p>}
-            {agent?.id === "assistant" && (
+            {agent?.id === "assistant" && !compact && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {starters.map((s) => <button key={s} type="button" className="btn text-left text-xs" onClick={() => sendMessage({ text: s })}>{s}</button>)}
               </div>
@@ -243,7 +257,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
         <div ref={end} />
       </div>
       {/* the composer floats: messages fade out under it instead of stopping at a hard edge */}
-      <div className={`relative ${empty ? "" : "pb-6 before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-linear-to-t before:from-bg"}`}>
+      <div className={`relative ${empty ? "" : `${compact ? "pb-3" : "pb-6"} before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-linear-to-t before:from-bg`}`}>
         <form
           className="composer flex flex-wrap items-end gap-2 rounded-ctl border border-line bg-bg py-1.5 px-1.5 shadow-lg transition-shadow focus-within:border-accent focus-within:ring-3 focus-within:ring-ring"
           onSubmit={(e) => {
@@ -253,6 +267,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
             files.forEach((f) => dt.items.add(f));
             stick.current = true; // your own message always brings you back down
             sendMessage(input.trim() ? { text: input, files: dt.files } : { files: dt.files });
+            drafts.delete(id);
             setInput("");
             setFiles([]);
           }}
@@ -285,7 +300,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
             }}
             placeholder={agent ? `Message ${agent.name}` : "Message"}
             aria-label="Message"
-            autoFocus
+            autoFocus={!compact || drafts.has(id)}
             suppressHydrationWarning
           />
           {busy ? (
