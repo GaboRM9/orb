@@ -1,9 +1,10 @@
 "use client";
 import { generateId } from "ai";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { deleteThread } from "@/lib/actions";
+import { chatHref, MAX_PANES, panesOf } from "@/lib/multiplex";
 import { Submit } from "./submit";
 import { BookIcon, BotIcon, GearIcon, MenuIcon, OrbIcon, PanelLeftIcon, PlusIcon, XIcon } from "./icons";
 
@@ -31,6 +32,9 @@ const toggleCollapsed = () => {
 export function Sidebar({ threads }: { threads: Thread[] }) {
   const path = usePathname();
   const router = useRouter();
+  const params = useSearchParams();
+  // the chats open on screen: the one in the path, plus any split off beside it
+  const panes = path.startsWith("/chat/") ? panesOf(path.slice(6), params.get("agent"), params.get("with")) : [];
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false);
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
@@ -66,9 +70,20 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
           <div className="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
             {threads.slice(0, 30).map((t) => {
               const here = path === `/chat/${t.id}`;
+              const shown = panes.some((p) => p.id === t.id);
               return (
                 <div key={t.id} className="group relative">
-                  <Link href={`/chat/${t.id}`} onClick={close} className={`${item(here)} rounded-ctl !py-1.5 !pl-4 !pr-9 !text-sm`}>
+                  <Link
+                    href={`/chat/${t.id}`}
+                    title="Shift-click to open beside this chat"
+                    onClick={(e) => {
+                      close();
+                      // Shift-click splits it in; ⌘/Ctrl-click keeps opening a new tab
+                      if (!e.shiftKey || !panes.length || shown || panes.length >= MAX_PANES) return;
+                      e.preventDefault();
+                      router.replace(chatHref([...panes, { id: t.id }]));
+                    }}
+                    className={`${item(shown)} rounded-ctl !py-1.5 !pl-4 !pr-9 !text-sm`}>
                     {t.title || "Untitled"}
                   </Link>
                   <form action={deleteThread.bind(null, t.id, here ? "/" : path)} className={`absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 text-mute hover:text-fg`}>
