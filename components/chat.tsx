@@ -16,6 +16,14 @@ type ChatAgent = { id: string; name: string; description: string };
 const greetings = ["What are we working on?", "Where should we start?", "What's on your mind?", "Ready when you are.", "What can I take off your plate?"];
 const greetingFor = (id: string) => greetings[[...id].reduce((h, c) => h + c.charCodeAt(0), 0) % greetings.length];
 
+// one-click first messages for the seeded Assistant (getTime, calculate, fetchUrl): the link one shows the approval card
+// ponytail: only the seeded agent gets them; per-agent starters in the agent form if people want their own
+const starters = [
+  "Summarize https://en.wikipedia.org/wiki/Large_language_model in 5 bullets",
+  "What's 18% tip on $86.40, split 3 ways?",
+  "Plan a 3-day trip to Lisbon",
+];
+
 const verbs: Record<string, [running: string, done: string]> = {
   getTime: ["Checking the time", "Checked the time"],
   calculate: ["Calculating", "Calculated"],
@@ -133,6 +141,11 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow }: { id: strin
             <div className="mb-1 text-xs text-mute">{name}</div>
             <p className="text-2xl font-light tracking-tight">{greeting}</p>
             {agent?.description && <p className="mt-1 text-sm text-mute">{agent.description}</p>}
+            {agent?.id === "assistant" && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {starters.map((s) => <button key={s} type="button" className="btn text-left text-xs" onClick={() => sendMessage({ text: s })}>{s}</button>)}
+              </div>
+            )}
           </div>
         )}
         {messages.map((m) => {

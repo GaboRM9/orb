@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { addMember, db, getAgent, getSetting, listMcp, me, removeMember, requireAdmin, requireAuth, resetMemberPassword, setMemberRole, setSetting, ws } from "./db";
+import { addMember, db, getAgent, getSetting, listMcp, me, removeMember, requireAdmin, requireAuth, requireEditor, resetMemberPassword, setMemberRole, setSetting, ws } from "./db";
 import { parseTheme, type Theme } from "./theme";
 import { seal } from "./secret";
 import { importGithub } from "./github";
@@ -66,7 +66,7 @@ export async function deleteThread(id: string, backTo: string) {
 }
 
 export async function saveSkill(f: FormData) {
-  await requireAuth();
+  await requireEditor();
   const id = Number(f.get("id")) || null;
   const v = [s(f, "name"), s(f, "description"), s(f, "body"), JSON.stringify(f.getAll("tools"))];
   if (v.slice(0, 3).some((x) => !x)) return;
@@ -77,20 +77,20 @@ export async function saveSkill(f: FormData) {
 }
 
 export async function toggleSkill(id: number) {
-  await requireAuth();
+  await requireEditor();
   await db.prepare("update skills set enabled = 1 - enabled where id=? and workspace_id=?").run(id, await ws());
   revalidatePath("/library");
 }
 
 export async function deleteSkill(id: number) {
-  await requireAuth();
+  await requireEditor();
   await db.prepare("delete from skills where id=? and workspace_id=?").run(id, await ws());
   revalidatePath("/library");
   redirect("/library?tab=skills");
 }
 
 export async function saveAgent(f: FormData) {
-  const { role } = await requireAuth();
+  const { role } = await requireEditor();
   const id = s(f, "id") || crypto.randomUUID().slice(0, 8);
   const name = s(f, "name");
   if (!name) return;
@@ -107,7 +107,7 @@ export async function saveAgent(f: FormData) {
 }
 
 export async function deleteAgent(id: string) {
-  await requireAuth();
+  await requireEditor();
   const w = await ws();
   await db.prepare("update threads set agent_id=null where agent_id=? and workspace_id=?").run(id, w);
   await db.prepare("delete from agents where id=? and workspace_id=?").run(id, w);
@@ -179,7 +179,7 @@ const TEXT = /\.(md|mdx|txt|rst|csv|json|ya?ml|html?)$/i;
 
 /** `files` and `paths` are parallel: FormData drops a folder pick's relative paths, so the client sends them alongside. */
 export async function uploadKnowledge(f: FormData): Promise<{ ok: boolean; text: string }> {
-  await requireAuth();
+  await requireEditor();
   const base = s(f, "folder");
   const paths = f.getAll("paths").map(String);
   let added = 0;
@@ -196,25 +196,25 @@ export async function uploadKnowledge(f: FormData): Promise<{ ok: boolean; text:
 }
 
 export async function deleteKnowledgeDoc(id: number) {
-  await requireAuth();
+  await requireEditor();
   await deleteDoc(id);
   revalidatePath("/library");
 }
 
 export async function deleteKnowledgeFolder(path: string) {
-  await requireAuth();
+  await requireEditor();
   await deleteFolder(path);
   revalidatePath("/library");
 }
 
 export async function embedKnowledge() {
-  await requireAuth();
+  await requireEditor();
   await embedMissing();
   revalidatePath("/library");
 }
 
 export async function importGithubDocs(f: FormData): Promise<{ ok: boolean; text: string }> {
-  await requireAuth();
+  await requireEditor();
   try {
     const { n, truncated } = await importGithub(s(f, "repo"), s(f, "dir"), s(f, "token"));
     revalidatePath("/library");

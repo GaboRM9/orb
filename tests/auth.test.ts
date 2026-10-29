@@ -114,3 +114,39 @@ it("an admin can't reset the password of someone who is also in another workspac
   await d.removeMember(d.DEFAULT_WS, uid);
   assert.ok(await d.signIn("fay@example.com", "fay's password"), "removed here, the account stays for the other workspace");
 });
+
+it("first-run setup needs AUTH_SECRET and only ever makes one admin", async () => {
+  assert.equal(a.ownsDeployment("wrong"), false);
+  assert.equal(a.ownsDeployment(" test-secret "), true);
+  // this database already has users from the tests above: setup is closed
+  assert.equal(await d.createFirstAdmin("late@example.com", "a long password"), null);
+  await d.db.batch([["delete from members"], ["delete from users"]]);
+  assert.equal(await d.createFirstAdmin("not an email", "a long password"), null);
+  const [first, second] = await Promise.all([d.createFirstAdmin("owner@example.com", "a long password"), d.createFirstAdmin("racer@example.com", "a long password")]);
+  assert.ok(!!first !== !!second, "exactly one of two racing setups wins");
+  const winner = first ? "owner@example.com" : "racer@example.com";
+  assert.equal((await d.sessionFor(await tokenFor(winner, "a long password")))?.role, "admin");
+});
+
+it("demo guests are capped per IP and can't edit shared things", async () => {
+  const env = { DEMO: process.env.DEMO, DAILY_BUDGET_USD: process.env.DAILY_BUDGET_USD, USER_DAILY_BUDGET_USD: process.env.USER_DAILY_BUDGET_USD };
+  process.env.DEMO = "1";
+  assert.equal(d.demoOn(), false, "no budgets set: no demo");
+  Object.assign(process.env, { DAILY_BUDGET_USD: "5", USER_DAILY_BUDGET_USD: "0.5" });
+  assert.equal(d.demoOn(), true);
+
+  const guests = [];
+  for (let i = 0; i < 4; i++) guests.push(await d.addGuest("203.0.113.9"));
+  assert.ok(guests.slice(0, 3).every(Boolean));
+  assert.equal(guests[3], null, "the 4th guest from one IP within an hour is refused");
+  assert.ok(await d.addGuest("198.51.100.1"), "another IP still gets in");
+
+  const g = guests[0]!;
+  const guest = (await d.sessionFor(a.makeToken(g.uid, g.workspace, g.tokenV)))!;
+  assert.equal(guest.role, "member");
+  assert.equal(d.readOnly(guest), true);
+  assert.equal(d.readOnly({ ...guest, role: "admin" }), false);
+  delete process.env.DEMO;
+  assert.equal(d.readOnly(guest), false, "without DEMO, members edit as before");
+  for (const [k, v] of Object.entries(env)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+});

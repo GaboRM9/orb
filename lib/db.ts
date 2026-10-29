@@ -54,6 +54,8 @@ const g = globalThis as { __client?: Client; __ready?: Promise<Client> };
 
 // idempotent and safe to run from several cold instances at once (every statement is "if not exists" / "or ignore")
 async function init() {
+  // Vercel's filesystem is read-only and per-instance: a local SQLite file can't work there
+  if (!REMOTE && process.env.VERCEL) throw new Error("No database: add the Turso integration (Vercel → Storage) and redeploy.");
   if (!REMOTE) mkdirSync(dirname(DB_PATH), { recursive: true });
   const c = (g.__client ??= createClient(REMOTE ? { url: REMOTE, authToken: process.env.TURSO_AUTH_TOKEN } : { url: `file:${DB_PATH}` }));
   if (!REMOTE) await c.executeMultiple("pragma journal_mode = WAL; pragma foreign_keys = ON;");
@@ -99,6 +101,7 @@ async function init() {
       begin delete from knowledge_fts where rowid = old.id; end;
     create index if not exists runs_started on runs(started desc);
     create table if not exists login_misses (t integer not null);
+    create table if not exists guest_signups (t integer not null, ip text);
     create table if not exists stops (thread_id text primary key, at integer not null);
     create table if not exists eval_cases (
       id integer primary key autoincrement, workspace_id text not null, agent_id text not null,
@@ -170,7 +173,7 @@ async function init() {
   if (!((await all(c, "select count(*) c from agents", []))[0] as { c: number }).c)
     await c.execute({
       sql: "insert or ignore into agents (id,name,description,instructions,tools_json,skills_json) values (?,?,?,?,?,?)",
-      args: ["assistant", "Assistant", "General-purpose helper. Start here.", "You are a helpful, concise assistant.", JSON.stringify(["getTime", "calculate"]), "[]"],
+      args: ["assistant", "Assistant", "General-purpose helper. Start here.", "You are a helpful, concise assistant.", JSON.stringify(["getTime", "calculate", "fetchUrl"]), "[]"],
     });
   return c;
 }
@@ -248,6 +251,14 @@ export async function requireAdmin() {
   if (s.role !== "admin") throw new Error("Only a workspace admin can change this.");
   return s;
 }
+/** DEMO=1: guests (and any other member) can chat but not change what everyone shares. */
+export const readOnly = (s: Session) => !!process.env.DEMO && s.role === "member";
+/** For actions that change shared agents, skills or Knowledge. */
+export async function requireEditor() {
+  const s = await requireAuth();
+  if (readOnly(s)) throw new Error("The demo is read-only. Clone the repo to edit.");
+  return s;
+}
 export const isAdmin = async () => (await session())?.role === "admin";
 
 let dummy: string | undefined;
@@ -271,6 +282,39 @@ export async function changePassword(uid: string, current: string, next: string)
   return r.token_v;
 }
 export const hasUsers = async () => !!(await db.prepare("select 1 from users limit 1").get());
+
+/** First-run setup: the first account, admin of the default workspace. Null once anyone has an account (checked inside the write, so two visitors racing a fresh deploy can't both get in). */
+export async function createFirstAdmin(email: string, password: string) {
+  email = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+$/.test(email)) return null;
+  const id = crypto.randomUUID();
+  // one atomic batch: the insert itself checks for users, so a second, racing setup inserts nothing
+  await db.batch([
+    ["insert into users (id, email, pass_hash, created) select ?,?,?,? where not exists (select 1 from users)", id, email, hashPassword(password), Date.now()],
+    ["insert into members (workspace_id, user_id, role) select ?,?,'admin' where exists (select 1 from users where id=?)", DEFAULT_WS, id, id],
+  ]);
+  return (await db.prepare("select 1 from users where id=?").get(id)) ? { uid: id, workspace: DEFAULT_WS, tokenV: 0 } : null;
+}
+
+// DEMO=1: "Try the demo" makes a member per visitor, so each one's chats stay private. Signups are capped per IP and per day,
+// or new guests would walk around USER_DAILY_BUDGET_USD.
+// ponytail: guest rows are never cleaned up; delete old @demo.invalid users when they pile up
+const GUESTS_PER_IP_HOUR = 3;
+export const demoOn = () => !!process.env.DEMO && !!Number(process.env.DAILY_BUDGET_USD) && !!Number(process.env.USER_DAILY_BUDGET_USD);
+export async function addGuest(ip: string | null) {
+  const now = Date.now();
+  const n = (await db.prepare(
+    "select count(*) filter (where ip=@ip and t>=@hour) ip, count(*) filter (where t>=@day) day from guest_signups",
+  ).get({ ip, hour: now - 3600_000, day: now - 86400_000 })) as { ip: number; day: number };
+  if (n.ip >= GUESTS_PER_IP_HOUR || n.day >= (Number(process.env.DEMO_GUESTS_PER_DAY) || 200)) return null;
+  const id = crypto.randomUUID();
+  await db.batch([
+    ["insert into guest_signups (t, ip) values (?,?)", now, ip],
+    ["insert into users (id, email, pass_hash, created) values (?,?,?,?)", id, `guest-${id.slice(0, 8)}@demo.invalid`, hashPassword(newPassword()), now],
+    ["insert into members (workspace_id, user_id, role) values (?,?,'member')", DEFAULT_WS, id],
+  ]);
+  return { uid: id, workspace: DEFAULT_WS, tokenV: 0 };
+}
 
 // Members (Settings → Members, scripts/user.mts). There is no workspace switcher, so an account belongs to one workspace:
 // an admin can't add, or reset the password of, someone who is also in another org.

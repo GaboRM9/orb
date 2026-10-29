@@ -39,6 +39,9 @@ export function parseToken(token?: string) {
   return { uid, workspace, tokenV: Number(tokenV) };
 }
 
+/** First-run setup: whoever can paste AUTH_SECRET deployed this, so they may create the first admin. */
+export const ownsDeployment = (pasted: string) => authConfigured() && same(pasted.trim(), secret());
+
 export const verifyToken = (token?: string) => !!parseToken(token);
 
 /** For route handlers: the session token from a raw Cookie header. */
