@@ -72,6 +72,13 @@ h1 { font-size: 2rem; font-weight: 300; letter-spacing: -0.03em; }
 .rise { animation: rise 0.25s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
 
+/* login halo: the ring draws itself in, then breathes */
+@keyframes halo-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes halo-breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.94); opacity: 0.7; } }
+.halo { animation: halo-breathe 4s ease-in-out 1.4s infinite; }
+.halo circle { stroke-dasharray: 1; transform: rotate(-90deg); transform-origin: center; animation: halo-draw 1.4s cubic-bezier(0.65, 0, 0.35, 1) both; }
+@media (prefers-reduced-motion: reduce) { .halo, .halo circle { animation: none; } }
+
 /* Directions map: the route in the accent, tiles inverted in dark mode like the other maps */
 .route-map { background: var(--surface); font-family: inherit; }
 .route-map .route-line { stroke: var(--accent); }
