@@ -13,6 +13,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateId, generateText } from "ai";
 import { loadChat } from "./chat-store";
 import { budgetError, logRun } from "./runs";
+import { EVERY, fire, validTz, type Schedule } from "./schedules";
+import { decide } from "./turn";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
@@ -340,4 +342,48 @@ export async function delegateBrief(threadId: string): Promise<{ brief: string }
     await logRun({ id, threadId, model: BRIEF_MODEL, started, status: "error", calls: [], error: e instanceof Error ? e.message : String(e) });
     return { error: "Couldn't summarize this chat. Try again." };
   }
+}
+
+// Schedules belong to whoever made them (their budget, their chats); admins may change or remove anyone's.
+const mineOrAdmin = "workspace_id=@w and (user_id=@u or @admin)";
+const scheduleScope = async (id: string) => {
+  const { uid, workspace, role } = await requireEditor();
+  return { id, w: workspace, u: uid, admin: role === "admin" ? 1 : 0 };
+};
+
+export async function saveSchedule(f: FormData) {
+  const { uid, workspace } = await requireEditor();
+  const [agent, prompt, every, tz] = [s(f, "agent"), s(f, "prompt"), s(f, "every"), s(f, "tz")];
+  const hour = Number(f.get("hour"));
+  if (!prompt || !(await getAgent(agent)) || !EVERY.includes(every as never) || !(hour >= 0 && hour <= 23)) return;
+  await db.prepare("insert into schedules (id,workspace_id,user_id,agent_id,prompt,every,hour,tz,created) values (?,?,?,?,?,?,?,?,?)")
+    .run(generateId(), workspace, uid, agent, prompt.slice(0, 4000), every, Math.floor(hour), validTz(tz) ? tz : "UTC", Date.now());
+  revalidatePath("/library");
+}
+
+export async function toggleSchedule(id: string) {
+  await db.prepare(`update schedules set enabled = 1 - enabled where id=@id and ${mineOrAdmin}`).run(await scheduleScope(id));
+  revalidatePath("/library");
+}
+
+export async function deleteSchedule(id: string) {
+  await db.prepare(`delete from schedules where id=@id and ${mineOrAdmin}`).run(await scheduleScope(id));
+  revalidatePath("/library");
+}
+
+/** Runs a schedule now (it runs as its creator), then opens the chat it made, or shows why it didn't run. */
+export async function runScheduleNow(id: string) {
+  const row = (await db.prepare(`select * from schedules where id=@id and ${mineOrAdmin}`).get(await scheduleScope(id))) as Schedule | undefined;
+  if (!row) return;
+  const thread = await fire(row);
+  revalidatePath("/", "layout");
+  if (thread && row.user_id === (await me())) redirect(`/chat/${thread}`);
+}
+
+/** Approve or Deny on an Inbox row: the chat resumes on the server, nobody needs it open. */
+export async function decideFromInbox(approvalId: string, approved: boolean) {
+  const { workspace, uid } = await requireAuth(); // the chat is yours: deciding its approvals is never a shared edit
+  const error = await decide(workspace, uid, approvalId, approved);
+  revalidatePath("/", "layout");
+  if (error) redirect(`/inbox?${new URLSearchParams({ error })}`);
 }

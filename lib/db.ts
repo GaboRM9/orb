@@ -111,6 +111,12 @@ async function init() {
       case_id integer not null, prompt text not null, model text not null, started integer not null,
       pass integer not null, reason text not null, answer text not null, ms integer not null, cost real);
     create index if not exists eval_results_agent on eval_results(workspace_id, agent_id, started desc);
+    create table if not exists schedules (
+      id text primary key, workspace_id text not null, user_id text not null, agent_id text not null, prompt text not null,
+      every text not null check (every in ('hourly','daily','weekdays')), hour integer not null default 9, tz text not null,
+      enabled integer not null default 1, created integer not null, last_run integer, last_thread text, last_error text);
+    create index if not exists schedules_ws on schedules(workspace_id, user_id);
+    create index if not exists runs_thread on runs(thread_id, started desc);
   `);
   const cols = async (table: string) => ((await all(c, `pragma table_info(${table})`, [])) as { name: string }[]).map((x) => x.name);
   for (const [table, col, ddl] of [

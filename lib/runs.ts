@@ -103,3 +103,15 @@ export const listApprovals = async (user: string | null, agent?: string, decisio
 
 export const approvalsForRun = async (user: string | null, runId: string) =>
   (await db.prepare("select * from approvals where (run_id=? or decided_run=?) and workspace_id=? and (? is null or user_id=?) order by requested").all(runId, runId, await ws(), user, user)) as Approval[];
+
+/**
+ * Approvals waiting on this user, for the Inbox. Only those from their chat's latest run: one the user moved past by
+ * sending another message instead would otherwise wait forever.
+ */
+export const waitingApprovals = async (uid: string) =>
+  (await db.prepare(
+    `select p.*, a.name agent, t.title from approvals p join threads t on t.id=p.thread_id left join agents a on a.id=p.agent_id
+     where p.workspace_id=? and p.user_id=? and p.decision='pending'
+       and p.run_id = (select r.id from runs r where r.thread_id=p.thread_id order by r.started desc limit 1)
+     order by p.requested desc limit 100`,
+  ).all(await ws(), uid)) as (Approval & { agent: string | null; title: string })[];
