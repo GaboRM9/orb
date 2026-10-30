@@ -1,20 +1,23 @@
 import Link from "next/link";
-import { attachMcp, clearKey, deleteKnowledgeDoc, deleteKnowledgeFolder, deleteMcp, revokeMcpTool, deleteSkill, embedKnowledge, saveMcp, saveSettings, saveSkill, toggleMcp, toggleSkill } from "@/lib/actions";
+import { attachMcp, clearKey, deleteKnowledgeDoc, deleteKnowledgeFolder, deleteMcp, deleteSchedule, revokeMcpTool, deleteSkill, embedKnowledge, runScheduleNow, saveMcp, saveSchedule, saveSettings, saveSkill, toggleMcp, toggleSchedule, toggleSkill } from "@/lib/actions";
 import { GithubImport, KnowledgeUpload } from "@/components/knowledge-upload";
 import { EvalsPanel } from "@/components/evals-panel";
 import { McpTest } from "@/components/mcp-test";
 import { Dialog } from "@/components/dialog";
 import { Submit } from "@/components/submit";
+import { TzInput } from "@/components/tz-input";
 import { AnthropicLogo, FolderIcon, GithubLogo, OpenAILogo, PlusIcon } from "@/components/icons";
 import { hasEmbeddingKey, listDocs, staleChunks, type Doc } from "@/lib/knowledge";
 import { DEFAULT_WS, getSetting, isAdmin, listAgents, listMcp, listSkills, requireAuth, type McpServer } from "@/lib/db";
 import { DEFAULT_MODEL, MODELS } from "@/lib/models";
 import { allowedMcp, mcpToolName } from "@/lib/mcp";
 import { toolInfo, toolNames } from "@/lib/tools";
+import { listSchedules, type Schedule } from "@/lib/schedules";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // evals and "Run now" run inside this page's server actions
 
-const tabs = [["knowledge", "Knowledge"], ["skills", "Skills"], ["connections", "Connections"], ["evals", "Evals"]] as const;
+const tabs = [["knowledge", "Knowledge"], ["skills", "Skills"], ["connections", "Connections"], ["schedules", "Schedules"], ["evals", "Evals"]] as const;
 
 export default async function LibraryPage({ searchParams }: PageProps<"/library">) {
   const { tab, skill, new: isNew, agent, run, edit, error } = await searchParams;
@@ -36,7 +39,68 @@ export default async function LibraryPage({ searchParams }: PageProps<"/library"
       {active === "knowledge" && <Knowledge />}
       {active === "skills" && <Skills skill={one(skill)} isNew={one(isNew)} />}
       {active === "connections" && <Connections />}
+      {active === "schedules" && <Schedules />}
       {active === "evals" && <EvalsPanel agent={one(agent)} run={one(run)} edit={one(edit)} error={one(error)} />}
+    </div>
+  );
+}
+
+const when = (s: Pick<Schedule, "every" | "hour" | "tz">) =>
+  s.every === "hourly" ? "Every hour" : `${s.every === "daily" ? "Every day" : "Weekdays"} at ${String(s.hour).padStart(2, "0")}:00 (${s.tz})`;
+
+async function Schedules() {
+  const s = await requireAuth();
+  const [rows, agents] = await Promise.all([listSchedules(s.role === "admin" ? null : s.uid), listAgents()]);
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-mute">
+        An agent gets a message on a schedule, in a new chat of yours. Tools that need approval wait for you in the Inbox.
+        {s.role === "admin" && " You see every member's schedules; each runs as whoever made it."}
+      </p>
+      {rows.length > 0 && (
+        <div className="divide-y divide-line border-y border-line">
+          {rows.map((r) => (
+            <div key={r.id} className="flex flex-wrap items-start justify-between gap-3 py-4">
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="text-sm"><span className="font-medium">{r.agent ?? "Deleted agent"}</span> <span className="text-xs text-mute">· {when(r)}{!r.enabled && " · Off"}</span></div>
+                <p className="truncate text-sm text-mute">{r.prompt}</p>
+                <p className="text-xs text-mute">
+                  {r.last_error ? <span className="text-fg">Last run failed: {r.last_error}</span>
+                    : r.last_run ? <>Last run {new Date(r.last_run).toLocaleString()}{r.last_thread && r.user_id === s.uid && <> · <Link href={`/chat/${r.last_thread}`} className="underline underline-offset-2">Open chat</Link></>}</>
+                    : "Hasn't run yet"}
+                </p>
+              </div>
+              <form className="flex gap-2">
+                <Submit className="btn text-xs" formAction={runScheduleNow.bind(null, r.id)} pendingText="Running…">Run now</Submit>
+                <Submit className={r.enabled ? "btn-solid text-xs" : "btn text-xs"} formAction={toggleSchedule.bind(null, r.id)}>{r.enabled ? "On" : "Off"}</Submit>
+                <Submit className="btn text-xs" formAction={deleteSchedule.bind(null, r.id)}>Delete</Submit>
+              </form>
+            </div>
+          ))}
+        </div>
+      )}
+      {agents.length ? (
+        <form action={saveSchedule} className="space-y-2 card">
+          <div className="text-sm font-medium">New schedule</div>
+          <TzInput />
+          <select className="field" name="agent" aria-label="Agent" required>
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <textarea className="field min-h-20" name="prompt" placeholder="What to ask it, e.g. Summarize yesterday's new GitHub issues." required aria-label="Prompt" />
+          <div className="flex flex-wrap gap-2">
+            <select className="field !w-auto" name="every" defaultValue="daily" aria-label="How often">
+              <option value="daily">Every day</option>
+              <option value="weekdays">Weekdays</option>
+              <option value="hourly">Every hour</option>
+            </select>
+            <select className="field !w-auto" name="hour" defaultValue="9" aria-label="At (your time; ignored for hourly)">
+              {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+            </select>
+          </div>
+          <p className="text-xs text-mute">The hour is in your timezone. Hosted on Vercel, schedules need the cron in vercel.json and a CRON_SECRET.</p>
+          <Submit className="btn-solid">Add schedule</Submit>
+        </form>
+      ) : <p className="text-sm text-mute">Create an agent first.</p>}
     </div>
   );
 }
