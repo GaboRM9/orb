@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { delegateBrief, renamePod, savePod, savePodGoal } from "@/lib/actions";
 import { MAX_PANES, replacePane, rowSizes, spans, type Pane } from "@/lib/multiplex";
+import { usePref } from "@/lib/pref";
 import { Chat, drafts, type PaneStatus } from "./chat";
 import { Dialog } from "./dialog";
 import type { ChatMessage } from "./gen-ui";
@@ -123,7 +124,7 @@ function AgentPicker({ pane, agents, started, pick, className }: {
   );
 }
 
-const SHORTCUTS = [["⌃⌥ ← / →", "Previous or next pane"], ["⌃⌥ Enter", "Maximize or restore the pane"], ["Esc", "Restore"], ["?", "These shortcuts"]];
+const SHORTCUTS = [["⌃⌥ ← / →", "Previous or next pane"], ["⌃⌥ Enter", "Maximize or restore the pane"], ["⌃⌥ Z", "Zen mode"], ["Esc", "Restore"], ["?", "These shortcuts"]];
 
 /** The pod's optional shared goal: every agent in the pod reads it each turn. */
 function GoalMenu({ pod }: { pod: { id: string; goal: string | null } }) {
@@ -153,6 +154,7 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
   const [overview, setOverview] = useState(false);
   const [current, setCurrent] = useState(0);
   const [said, setSaid] = useState(""); // what the live region last announced
+  const [zen, setZen] = usePref("zen"); // the chats and nothing else; remembered on this device
   const [fresh, setFresh] = useState<string>(); // the pane just added: its composer takes focus
   const refocus = useRef<string>(undefined); // after a close: the neighbour that takes focus
   const n = panes.length;
@@ -169,6 +171,7 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
       else if (e.ctrlKey && e.altKey && (e.key === "ArrowRight" || e.key === "ArrowLeft") && n > 1)
         focusPane(panes[(Math.max(at, 0) + (e.key === "ArrowRight" ? 1 : n - 1)) % n].id);
       else if (e.ctrlKey && e.altKey && e.key === "Enter" && split && at >= 0) setMax((m) => (m === panes[at].id ? null : panes[at].id));
+      else if (e.ctrlKey && e.altKey && e.code === "KeyZ") setZen(!zen); // code: ⌥Z types Ω on a Mac
       else if (e.key === "?" && !typing) document.getElementById("shortcuts")?.click();
       else return;
       e.preventDefault();
@@ -250,7 +253,10 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
           {SHORTCUTS.map(([k, what]) => <div key={k} className="contents"><dt className="font-mono text-xs leading-5">{k}</dt><dd className="text-mute">{what}</dd></div>)}
         </dl>
       </Dialog>
-      {split && (
+      {zen && (
+        <button onClick={() => setZen(false)} className="btn glass fixed left-1/2 top-2 z-30 -translate-x-1/2 text-xs opacity-40 transition-opacity hover:opacity-100 focus:opacity-100">Exit zen mode</button>
+      )}
+      {split && !zen && (
         <div className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
           {pod && (
             <input
@@ -277,13 +283,15 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
             <button onClick={() => show(needs[0].id)} className="chip shrink-0 border-accent">{needs.length} need{needs.length === 1 ? "s" : ""} you</button>
           )}
           <span className="flex-1" />
+          <button onClick={() => setZen(true)} className="btn shrink-0 text-xs">Zen mode</button>
           <button onClick={() => setOverview(!overview)} aria-label="Overview" aria-pressed={overview} className={`btn grid h-8 w-8 place-items-center p-0 md:hidden ${overview ? "bg-surface-2" : ""}`}><GridIcon /></button>
         </div>
       )}
       {/* one pane: no pane chrome, just this button where the pane header would be */}
-      {!split && panes[0] && (
+      {!split && !zen && panes[0] && (
         <div className="fixed right-4 top-2.5 z-20 flex items-center gap-2 md:top-4">
           <AgentPicker pane={panes[0]} agents={agents} started={started(panes[0])} pick={pick(panes[0])} className="btn glass h-9 max-w-40 truncate py-0 text-xs" />
+          <button onClick={() => setZen(true)} className="btn glass h-9 py-0 text-xs">Zen mode</button>
           <SplitMenu from={panes[0]} agents={agents} closed={closed} add={addAfter(0)} className="btn glass grid h-9 w-9 place-items-center p-0" />
         </div>
       )}
@@ -301,10 +309,11 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
                 id={`pane-${p.id}`}
                 aria-label={`${nameOf(p)}: ${p.title || "New chat"}`}
                 style={place(p.id, i)}
-                className={`flex h-full w-full shrink-0 snap-start flex-col overflow-hidden md:w-auto md:[grid-column:var(--c)] md:[grid-row:var(--r)] lg:[grid-column:var(--cl)] ${split ? `md:rounded-lg md:border ${s === "needs" ? "md:border-accent" : "md:border-line"}` : ""}`}
+                className={`group/pane flex h-full w-full shrink-0 snap-start flex-col overflow-hidden md:w-auto md:[grid-column:var(--c)] md:[grid-row:var(--r)] lg:[grid-column:var(--cl)] ${split ? `md:rounded-lg md:border ${s === "needs" ? "md:border-accent" : "md:border-line"}` : ""}`}
               >
                 {split && (
-                  <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line px-3 text-xs">
+                  // zen: the header fades out until you point at the pane or tab into it (always there on touch)
+                  <div className={`flex h-9 shrink-0 items-center gap-2 border-b border-line px-3 text-xs ${zen ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover/pane:opacity-100 pointer-coarse:opacity-100" : ""}`}>
                     <span title={label(s)} className={`size-2 shrink-0 rounded-full ${dot(s)}`}><span className="sr-only">{label(s)}</span></span>
                     <AgentPicker pane={p} agents={agents} started={started(p)} pick={pick(p)} className="max-w-32 shrink-0 truncate rounded-ctl bg-transparent font-medium hover:bg-hover" />
                     <span className="min-w-0 flex-1 truncate text-mute">
