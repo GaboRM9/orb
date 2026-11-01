@@ -9,7 +9,8 @@ import { allowedMcp, MCP_PREFIX, mcpApproval } from "@/lib/mcp";
 import { open } from "@/lib/secret";
 import { budgetError, logRun, stopRequested, syncApprovals, type LoggedCall } from "@/lib/runs";
 import { legacySurfaceTools } from "@/lib/surfaces";
-import { agentSetup, APPROVAL_TOOLS, genUiTools } from "@/lib/tools";
+import { agentSetup, APPROVAL_TOOLS, genUiTools, podContext } from "@/lib/tools";
+import { linkedPanes, podOf } from "@/lib/pods";
 import { clipOverlong, surfaceContext } from "@/lib/ui-tools";
 
 const CACHE = { anthropic: { cacheControl: { type: "ephemeral" } } } as const;
@@ -41,7 +42,7 @@ async function turnIn(w: string, uid: string, { id, message, agentId, context }:
   // callbacks below can run after the response ends, outside the request: they get the workspace and user explicitly
   const scoped = <T,>(fn: () => T) => inWorkspace(w, () => asUser(uid, fn));
   // independent reads side by side: on Turso each await is a network round trip before the first token
-  const [savedKey, overBudget, saved, agent, genUiSetting, allowed, modelSetting] = await Promise.all([
+  const [savedKey, overBudget, saved, agent, genUiSetting, allowed, modelSetting, linked, pod] = await Promise.all([
     getSetting("api_key"),
     scoped(() => budgetError(uid)),
     scoped(() => loadChat(id)),
@@ -49,6 +50,8 @@ async function turnIn(w: string, uid: string, { id, message, agentId, context }:
     getSetting("gen_ui", "on"),
     allowedMcp(),
     getSetting("model", DEFAULT_MODEL),
+    scoped(() => linkedPanes(id)),
+    scoped(() => podOf(id)),
   ]);
   const apiKey = open(savedKey) || (await envKey("ANTHROPIC_API_KEY"));
   if (!apiKey) return refuse("Set your Anthropic API key in Library → Connections.", 400);
@@ -74,6 +77,13 @@ async function turnIn(w: string, uid: string, { id, message, agentId, context }:
   if (mcpDown) instructions.push({ role: "system", content: mcpDown });
   const surfaceState = surfaceContext(context);
   if (surfaceState) instructions.push({ role: "system", content: surfaceState });
+  if (pod?.goal) instructions.push({ role: "system", content: `This chat is one of several side by side in a pod. The user set a goal they all share; keep your work aimed at it:\n${pod.goal}` });
+  // ponytail: readPane joins the tool list, so linking or unlinking a pane costs that chat one cache miss
+  const links = podContext(id, linked);
+  if (links) {
+    Object.assign(tools, links.tools);
+    instructions.push({ role: "system", content: links.system });
+  }
   // with the UI tools even when they're off, so surfaces from earlier turns still reach the model as their summary, not their data
   const history = fitContext(await convertToModelMessages(messages, { tools: { ...legacySurfaceTools(), ...genUiTools(), ...tools } }));
   const last = history.at(-1);

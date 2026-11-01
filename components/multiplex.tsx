@@ -2,14 +2,14 @@
 import { generateId } from "ai";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { delegateBrief } from "@/lib/actions";
-import { chatHref, MAX_PANES, rowSizes, spans, type Pane } from "@/lib/multiplex";
+import { delegateBrief, renamePod, savePod, savePodGoal } from "@/lib/actions";
+import { MAX_PANES, rowSizes, spans, type Pane } from "@/lib/multiplex";
 import { Chat, drafts, type PaneStatus } from "./chat";
 import { Dialog } from "./dialog";
 import type { ChatMessage } from "./gen-ui";
-import { GridIcon, MaximizeIcon, MinimizeIcon, SplitIcon, XIcon } from "./icons";
+import { GridIcon, LinkIcon, MaximizeIcon, MinimizeIcon, SplitIcon, XIcon } from "./icons";
 
-type LoadedPane = { id: string; messages: ChatMessage[]; title?: string; agent?: { id: string; name: string; description: string } };
+type LoadedPane = { id: string; messages: ChatMessage[]; title?: string; agent?: { id: string; name: string; description: string }; sees?: string[] };
 type Option = { id: string; name: string };
 
 const dot = (s?: PaneStatus["state"]) => (s === "needs" ? "bg-accent" : s === "working" ? "animate-pulse bg-accent/50" : "bg-line");
@@ -63,12 +63,53 @@ function SplitMenu({ from, agents, closed, add, className }: {
   );
 }
 
+const nameOf = (p: LoadedPane) => p.agent?.name ?? "orb";
+
+/** Which other panes of the pod this pane's agent may read (readPane). One-way; "both ways" links the checked ones back. */
+function LinkMenu({ pane, others, save }: { pane: LoadedPane; others: LoadedPane[]; save: (sees: string[], both: boolean) => void }) {
+  return (
+    <Dialog label={<LinkIcon className="h-3.5 w-3.5" />} title={`What ${nameOf(pane)} can read`} className="grid h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg pointer-coarse:size-8">
+      <form key={pane.sees?.join()} method="dialog" className="space-y-4" onSubmit={(e) => {
+        const f = new FormData(e.currentTarget);
+        save(f.getAll("sees").map(String), f.has("both"));
+      }}>
+        <p className="text-xs text-mute">Chats are private to their pane until you link them. A linked chat is read only when the agent needs it.</p>
+        <div className="space-y-2">
+          {others.map((o) => (
+            <label key={o.id} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="sees" value={o.id} defaultChecked={pane.sees?.includes(o.id)} />
+              <span className="shrink-0 font-medium">{nameOf(o)}</span>
+              <span className="min-w-0 truncate text-mute">{o.title || "New chat"}</span>
+            </label>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-xs text-mute"><input type="checkbox" name="both" /> Both ways: the checked chats can read this one too</label>
+        <button className="btn-solid text-xs">Save</button>
+      </form>
+    </Dialog>
+  );
+}
+
+/** The pod's optional shared goal: every agent in the pod reads it each turn. */
+function GoalMenu({ pod }: { pod: { id: string; goal: string | null } }) {
+  return (
+    <Dialog label="Goal" title="Shared goal" className={`chip shrink-0 ${pod.goal ? "border-accent" : "text-mute"}`}>
+      <form key={pod.goal} method="dialog" className="space-y-4" onSubmit={(e) => void savePodGoal(pod.id, String(new FormData(e.currentTarget).get("goal") ?? ""))}>
+        <p className="text-xs text-mute">Optional. Every agent in this pod sees it on each turn, so their work stays aimed at the same thing. Leave it blank for none.</p>
+        <textarea name="goal" rows={4} maxLength={2000} defaultValue={pod.goal ?? ""} placeholder="e.g. Ship the Q4 launch plan: budget $20k, ready by Nov 15" className="field w-full" />
+        <button className="btn-solid text-xs">Save</button>
+      </form>
+    </Dialog>
+  );
+}
+
 /**
- * A chat page: one chat, or up to 10 side by side once you split it. The panes are one flat list in every layout, so
+ * A pod: one chat, or up to 10 side by side once you split it. The panes are one flat list in every layout, so
  * splitting or resizing never remounts a running chat: phones swipe between full-screen panes (scroll-snap); from md
  * they're a 12-column grid of even rows, at most 2 columns until lg, then 4. ⤢ gives one pane 2/3 of the screen.
  */
-export function Multiplex({ panes, agents, threads, canAlwaysAllow }: {
+export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }: {
+  pod?: { id: string; title: string | null; goal: string | null }; focus: string; // the chat in the URL
   panes: LoadedPane[]; agents: Option[]; threads: { id: string; title: string }[]; canAlwaysAllow?: boolean;
 }) {
   const router = useRouter();
@@ -78,8 +119,7 @@ export function Multiplex({ panes, agents, threads, canAlwaysAllow }: {
   const [current, setCurrent] = useState(0);
   const n = panes.length;
   const split = n > 1;
-  // a pane keeps its agent in the URL only until its thread is saved with it
-  const list: Pane[] = panes.map((p) => ({ id: p.id, agent: p.messages.length ? undefined : p.agent?.id }));
+  const list: Pane[] = panes.map((p) => ({ id: p.id, agent: p.agent?.id, sees: p.sees }));
 
   const maxed = split && panes.some((p) => p.id === max) ? max : null;
   useEffect(() => {
@@ -89,7 +129,20 @@ export function Multiplex({ panes, agents, threads, canAlwaysAllow }: {
     return () => window.removeEventListener("keydown", onKey);
   }, [maxed]);
 
-  const go = (next: Pane[]) => router.replace(chatHref(next));
+  // saved, then the page refreshes with it; closing the chat in the URL opens one that's left
+  // ponytail: that open remounts the other panes; a running one reloads from the database once its turn is saved
+  const go = async (next: Pane[]) => {
+    await savePod(pod?.id ?? null, next);
+    const first = next[0];
+    if (!next.some((p) => p.id === focus)) router.replace(`/chat/${first.id}${first.agent ? `?agent=${first.agent}` : ""}`);
+  };
+  const link = (id: string) => (sees: string[], both: boolean) =>
+    go(list.map((q) => (q.id === id ? { ...q, sees } : both && sees.includes(q.id) ? { ...q, sees: [...(q.sees ?? []), id] } : q)));
+  // opened from a link to one of its chats (Inbox, a schedule): phones swipe to that pane
+  const first = panes[0]?.id;
+  useEffect(() => {
+    if (focus !== first && !matchMedia("(min-width: 48rem)").matches) document.getElementById(`pane-${focus}`)?.scrollIntoView({ inline: "start", block: "nearest" });
+  }, [focus, first]);
   const addAfter = (i: number) => (p: Pane) => go([...list.slice(0, i + 1), p, ...list.slice(i + 1)]);
   // desktop: maximize it; phone: swipe to it
   const show = (id: string) => {
@@ -115,6 +168,18 @@ export function Multiplex({ panes, agents, threads, canAlwaysAllow }: {
     <div className="flex h-full flex-col">
       {split && (
         <div className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
+          {pod && (
+            <input
+              key={pod.title}
+              aria-label="Pod name"
+              defaultValue={pod.title ?? ""}
+              placeholder={panes[0]?.title || "Untitled pod"}
+              onBlur={(e) => e.target.value !== (pod.title ?? "") && void renamePod(pod.id, e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              className="min-w-0 max-w-48 truncate bg-transparent text-sm font-medium outline-none placeholder:text-fg"
+            />
+          )}
+          {pod && <GoalMenu pod={pod} />}
           <span className="hidden text-xs text-mute md:inline">{n} of {MAX_PANES}{working ? ` · ${working} working` : ""}</span>
           {/* phones: one dot per pane, the one on screen drawn long; tap to jump */}
           <div className="flex items-center md:hidden">
@@ -154,8 +219,11 @@ export function Multiplex({ panes, agents, threads, canAlwaysAllow }: {
                 {split && (
                   <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line px-3 text-xs">
                     <span title={label(s)} className={`size-2 shrink-0 rounded-full ${dot(s)}`} />
-                    <span className="shrink-0 font-medium">{p.agent?.name ?? "orb"}</span>
-                    <span className="min-w-0 flex-1 truncate text-mute">{p.title}</span>
+                    <span className="shrink-0 font-medium">{nameOf(p)}</span>
+                    <span className="min-w-0 flex-1 truncate text-mute">
+                      {p.sees?.length ? `↳ sees ${panes.filter((o) => p.sees!.includes(o.id)).map(nameOf).join(", ")} · ` : ""}{p.title}
+                    </span>
+                    <LinkMenu pane={p} others={panes.filter((o) => o.id !== p.id)} save={link(p.id)} />
                     {canSplit && <SplitMenu from={p} agents={agents} closed={closed} add={addAfter(i)} className="grid h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg pointer-coarse:size-8" />}
                     <button onClick={() => setMax(maxed === p.id ? null : p.id)} aria-label={maxed === p.id ? "Restore" : "Maximize"} title={maxed === p.id ? "Restore (Esc)" : "Maximize"} className="hidden h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg md:grid">
                       {maxed === p.id ? <MinimizeIcon className="h-3.5 w-3.5" /> : <MaximizeIcon className="h-3.5 w-3.5" />}

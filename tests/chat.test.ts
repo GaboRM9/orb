@@ -288,6 +288,49 @@ describe("POST /api/chat", () => {
   });
 });
 
+describe("pods", () => {
+  it("saves a pod; a chat moved to another pod leaves its old one, and a pod of one is no pod", async () => {
+    const pods = await import("../lib/pods");
+    const first = await pods.savePanes(null, [{ id: "t1" }, { id: "gone" }]);
+    assert.equal((await pods.podOf("gone"))?.id, first);
+    const second = await pods.savePanes(null, [{ id: "halt" }, { id: "gone" }]);
+    assert.equal((await pods.podOf("gone"))?.id, second);
+    assert.equal(await pods.podOf("t1"), undefined, "t1 was left alone in its pod, so the pod is gone");
+    assert.equal(await pods.savePanes(second, [{ id: "halt" }]), null);
+    assert.equal(await pods.podOf("halt"), undefined);
+  });
+
+  it("a linked pane's agent gets readPane for the chats it sees, and only those, and only its owner's", async () => {
+    const pods = await import("../lib/pods");
+    const { podContext } = await import("../lib/tools");
+    await pods.savePanes(null, [{ id: "t1", sees: ["gone"] }, { id: "gone" }, { id: "halt" }]);
+    await (await post({ id: "t1", message: user("u3", "with links") })).text();
+    assert.ok(seen.at(-1)!.tools.includes("readPane"));
+    assert.match(seen.at(-1)!.system, /gone/);
+    assert.doesNotMatch(seen.at(-1)!.system, /halt/, "a pane it doesn't see stays private");
+    await (await post({ id: "gone", message: user("u4", "no links") })).text();
+    assert.ok(!seen.at(-1)!.tools.includes("readPane"), "links are one-way");
+
+    const read = podContext("t1", await pods.linkedPanes("t1"))!.tools.readPane.execute as (i: { pane: string }) => Promise<{ transcript?: string; error?: string }>;
+    assert.match((await read({ pane: "gone" })).transcript!, /slowpoke/);
+    assert.deepEqual(await scopes.userScope.run("u2", () => pods.linkedPanes("t1")), [], "another user can't reach your pod");
+    await pods.savePanes((await pods.podOf("t1"))!.id, [{ id: "t1" }, { id: "gone" }, { id: "halt" }]);
+    assert.ok((await read({ pane: "gone" })).error, "unlinked mid-turn: no longer readable");
+  });
+});
+
+describe("pod goal", () => {
+  it("every agent in the pod gets the shared goal; outside a pod there's none", async () => {
+    const pods = await import("../lib/pods");
+    const id = (await pods.savePanes(null, [{ id: "t1" }, { id: "gone" }]))!;
+    await pods.setPodGoal(id, "  Ship the launch plan  ");
+    await (await post({ id: "gone", message: user("u5", "goal?") })).text();
+    assert.match(seen.at(-1)!.system, /Ship the launch plan/);
+    await (await post({ id: "halt", message: user("u6", "solo") })).text();
+    assert.doesNotMatch(seen.at(-1)!.system, /Ship the launch plan/);
+  });
+});
+
 describe("auth", () => {
   it("rejects chat requests without a valid session", async () => {
     assert.equal((await post({ id: "a", message: {} }, "")).status, 401);

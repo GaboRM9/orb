@@ -19,6 +19,7 @@ export const PaperclipIcon = svg(<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.82
 export const XIcon = svg(<path d="M18 6 6 18M6 6l12 12" />);
 export const GridIcon = svg(<><rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" /><rect width="7" height="7" x="3" y="14" rx="1" /></>);
 export const SplitIcon = svg(<><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M12 3v18" /></>);
+export const LinkIcon = svg(<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>);
 export const MaximizeIcon = svg(<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />);
 export const MinimizeIcon = svg(<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />);
 export const InboxIcon = svg(<><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></>);

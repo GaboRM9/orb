@@ -29,6 +29,16 @@ export async function loadChat(id: string): Promise<UIMessage[]> {
   return r ? dedupe(JSON.parse(r.json)) : [];
 }
 
+/** A chat as plain text, newest `max` chars. ponytail: text only; tool output and attachments stay behind */
+export const transcriptOf = async (id: string, max: number) =>
+  (await loadChat(id))
+    .flatMap((m) => {
+      const t = m.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
+      return t ? [`${m.role === "user" ? "User" : "Assistant"}: ${t}`] : [];
+    })
+    .join("\n\n")
+    .slice(-max);
+
 // A message superseded by a later one (same id, or same tool call) is a stale copy: drop it.
 // Duplicate tool_use ids make Anthropic reject the request and duplicate React keys break the UI.
 const callIds = (m: UIMessage) => m.parts.flatMap((p) => ("toolCallId" in p ? [p.toolCallId] : []));

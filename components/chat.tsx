@@ -34,6 +34,7 @@ const verbs: Record<string, [running: string, done: string]> = {
   searchKnowledge: ["Searching your knowledge", "Searched your knowledge"],
   loadSkill: ["Loading a skill", "Loaded a skill"],
   createSkill: ["Saving a skill", "Saved a skill"],
+  readPane: ["Reading a linked chat", "Read a linked chat"],
 };
 
 // what the user is approving, in one line
@@ -48,6 +49,8 @@ type ToolPart = Parameters<typeof getToolName>[0];
 const toolLabel = (p: ToolPart) => {
   const name = getToolName(p);
   const [running, finished] = verbs[name] ?? [`Using ${name}`, `Used ${name}`];
+  const read = name === "readPane" && "output" in p && (p.output as { agent?: string })?.agent;
+  if (read && p.state === "output-available") return `Read ${read}`;
   return p.state === "output-error" ? `${name} failed` : p.state === "output-available" ? finished : `${running}…`;
 };
 const toolJson = (p: ToolPart) => JSON.stringify({ input: p.input, output: "output" in p ? p.output : undefined }, null, 2);

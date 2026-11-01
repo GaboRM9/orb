@@ -1,19 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { chatHref, formatPanes, panesOf, parsePanes, rowSizes, spans } from "../lib/multiplex";
+import { normalize, rowSizes, spans } from "../lib/multiplex";
 
 describe("multiplex", () => {
-  it("parses the pane list, dropping junk, duplicates and anything past 10", () => {
-    assert.deepEqual(parsePanes("a1.assistant,b2,a1,../x,c3.bad agent"), [{ id: "a1", agent: "assistant" }, { id: "b2", agent: undefined }]);
-    assert.equal(parsePanes(Array.from({ length: 12 }, (_, i) => `t${i}`).join(",")).length, 10);
-    assert.deepEqual(parsePanes(undefined), []);
-    assert.equal(formatPanes(parsePanes("a1.assistant,b2")), "a1.assistant,b2");
-  });
-
-  it("round-trips a split chat through its URL", () => {
-    assert.equal(chatHref(panesOf("a1", null, null)), "/chat/a1");
-    assert.equal(chatHref(panesOf("a1", "assistant", "b2.writer,c3")), "/chat/a1?agent=assistant&with=b2.writer,c3");
-    assert.equal(chatHref(panesOf("a1", null, "a1,b2")), "/chat/a1?with=b2"); // the chat itself can't be split off twice
+  it("normalizes a pod's panes: no junk, duplicates or more than 10; links only to other panes of the pod", () => {
+    assert.deepEqual(normalize([{ id: "a1", agent: "assistant", sees: ["b2", "a1", "zz", "b2"] }, { id: "b2", agent: "bad agent" }, { id: "a1" }, { id: "../x" }]), [
+      { id: "a1", agent: "assistant", sees: ["b2"] },
+      { id: "b2" },
+    ]);
+    assert.equal(normalize(Array.from({ length: 12 }, (_, i) => ({ id: `t${i}` }))).length, 10);
   });
 
   it("splits panes into even rows that fill the screen", () => {
