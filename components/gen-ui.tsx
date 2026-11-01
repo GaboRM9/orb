@@ -1,7 +1,7 @@
 "use client";
 import type { InferUITools, UIMessage } from "ai";
 import { getToolName, isToolUIPart } from "ai";
-import { useState } from "react";
+import { Component, useState } from "react";
 import type { retiredUiTools, uiTools } from "@/lib/ui-tools";
 import { SurfaceFrame, type SurfaceResult } from "./surface";
 
@@ -16,9 +16,24 @@ const Title = ({ children }: { children?: string }) => (children ? <div classNam
 /** Returns a component for known UI-tool parts, or null so the caller falls back to the generic card. */
 export function renderUiPart(p: Part, ctx: UiCtx) {
   const ui = drawUiPart(p, ctx);
+  if (!ui) return null;
   // a UI call that failed validation is retried by the model: drawing the failed attempt too shows the card twice.
   // Surfaces keep their "Couldn't open" note: theirs is a data error the user should see.
-  return ui && isToolUIPart(p) && p.state === "output-error" && !getToolName(p).startsWith("open") ? <></> : ui;
+  if (isToolUIPart(p) && p.state === "output-error" && !getToolName(p).startsWith("open")) return <></>;
+  // keyed by state: a part that threw while streaming is drawn again once its input is validated
+  return <Unchecked key={isToolUIPart(p) ? p.state : undefined}>{ui}</Unchecked>;
+}
+
+/**
+ * Until a call ends, its input is whatever the model has streamed so far, unchecked by the tool's schema (a row as a
+ * string instead of a list, say). A view that throws on that draws nothing, instead of taking the whole chat down.
+ */
+class Unchecked extends Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError = () => ({ failed: true });
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
 }
 
 function drawUiPart(p: Part, ctx: UiCtx) {
