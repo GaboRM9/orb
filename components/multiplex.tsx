@@ -1,9 +1,10 @@
 "use client";
 import { generateId } from "ai";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { delegateBrief, renamePod, savePod, savePodGoal } from "@/lib/actions";
-import { MAX_PANES, rowSizes, spans, type Pane } from "@/lib/multiplex";
+import { MAX_PANES, replacePane, rowSizes, spans, type Pane } from "@/lib/multiplex";
+import { usePref } from "@/lib/pref";
 import { Chat, drafts, type PaneStatus } from "./chat";
 import { Dialog } from "./dialog";
 import type { ChatMessage } from "./gen-ui";
@@ -12,7 +13,7 @@ import { GridIcon, LinkIcon, MaximizeIcon, MinimizeIcon, SplitIcon, XIcon } from
 type LoadedPane = { id: string; messages: ChatMessage[]; title?: string; agent?: { id: string; name: string; description: string }; sees?: string[] };
 type Option = { id: string; name: string };
 
-const dot = (s?: PaneStatus["state"]) => (s === "needs" ? "bg-accent" : s === "working" ? "animate-pulse bg-accent/50" : "bg-line");
+const dot = (s?: PaneStatus["state"]) => (s === "needs" ? "bg-accent" : s === "working" ? "motion-safe:animate-pulse bg-accent/50" : "bg-line");
 const label = (s?: PaneStatus["state"]) => (s === "needs" ? "Needs you" : s === "working" ? "Working" : "Idle");
 const rows = (n: number) => `repeat(${n}, minmax(0, 1fr))`;
 
@@ -64,6 +65,11 @@ function SplitMenu({ from, agents, closed, add, className }: {
 }
 
 const nameOf = (p: LoadedPane) => p.agent?.name ?? "orb";
+/** Puts the cursor in a pane's composer; phones swipe to it too. */
+const focusPane = (id: string) => {
+  document.querySelector<HTMLTextAreaElement>(`#pane-${CSS.escape(id)} textarea`)?.focus();
+  if (!matchMedia("(min-width: 48rem)").matches) document.getElementById(`pane-${id}`)?.scrollIntoView({ inline: "start", block: "nearest" });
+};
 
 /** Which other panes of the pod this pane's agent may read (readPane). One-way; "both ways" links the checked ones back. */
 function LinkMenu({ pane, others, save }: { pane: LoadedPane; others: LoadedPane[]; save: (sees: string[], both: boolean) => void }) {
@@ -89,6 +95,36 @@ function LinkMenu({ pane, others, save }: { pane: LoadedPane; others: LoadedPane
     </Dialog>
   );
 }
+
+/**
+ * The pane's agent. An empty chat just switches; one with history hands off: a new chat with that agent takes the
+ * slot, opening with a brief of this one, and this one carries on as a chat of its own.
+ */
+function AgentPicker({ pane, agents, started, pick, className }: {
+  pane: LoadedPane; agents: Option[]; started: boolean; pick: (agent: string) => Promise<string | void>; className: string;
+}) {
+  const [state, setState] = useState(""); // "busy", or the hand-off error
+  return (
+    <label className="flex min-w-0 items-center gap-1.5">
+      <span className="sr-only">{started ? "Hand this chat off to another agent" : "Agent for this chat"}</span>
+      <select
+        value={pane.agent?.id ?? ""}
+        disabled={state === "busy"}
+        title={started ? "Pick an agent to hand this chat off with a brief" : "Agent for this chat"}
+        onChange={async (e) => {
+          setState("busy");
+          setState((await pick(e.target.value)) ?? "");
+        }}
+        className={className}
+      >
+        {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+      </select>
+      {state && <span role="status" className="truncate text-xs text-mute">{state === "busy" ? "Writing the brief…" : state}</span>}
+    </label>
+  );
+}
+
+const SHORTCUTS = [["⌃⌥ ← / →", "Previous or next pane"], ["⌃⌥ Enter", "Maximize or restore the pane"], ["⌃⌥ Z", "Zen mode"], ["Esc", "Restore"], ["?", "These shortcuts"]];
 
 /** The pod's optional shared goal: every agent in the pod reads it each turn. */
 function GoalMenu({ pod }: { pod: { id: string; goal: string | null } }) {
@@ -117,24 +153,52 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
   const [max, setMax] = useState<string | null>(null);
   const [overview, setOverview] = useState(false);
   const [current, setCurrent] = useState(0);
+  const [said, setSaid] = useState(""); // what the live region last announced
+  const [zen, setZen] = usePref("zen"); // the chats and nothing else; remembered on this device
+  const [fresh, setFresh] = useState<string>(); // the pane just added: its composer takes focus
+  const refocus = useRef<string>(undefined); // after a close: the neighbour that takes focus
   const n = panes.length;
   const split = n > 1;
   const list: Pane[] = panes.map((p) => ({ id: p.id, agent: p.agent?.id, sees: p.sees }));
 
   const maxed = split && panes.some((p) => p.id === max) ? max : null;
+  // ⌃⌥ because the obvious keys are taken: ⌘[ is Back, ⌥/⇧ arrows move through the text you're typing
   useEffect(() => {
-    if (!maxed) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMax(null);
+    const onKey = (e: KeyboardEvent) => {
+      const at = panes.findIndex((p) => document.getElementById(`pane-${p.id}`)?.contains(document.activeElement));
+      const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
+      if (e.key === "Escape" && maxed) setMax(null);
+      else if (e.ctrlKey && e.altKey && (e.key === "ArrowRight" || e.key === "ArrowLeft") && n > 1)
+        focusPane(panes[(Math.max(at, 0) + (e.key === "ArrowRight" ? 1 : n - 1)) % n].id);
+      else if (e.ctrlKey && e.altKey && e.key === "Enter" && split && at >= 0) setMax((m) => (m === panes[at].id ? null : panes[at].id));
+      else if (e.ctrlKey && e.altKey && e.code === "KeyZ") setZen(!zen); // code: ⌥Z types Ω on a Mac
+      else if (e.key === "?" && !typing) document.getElementById("shortcuts")?.click();
+      else return;
+      e.preventDefault();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [maxed]);
+  });
 
   // saved, then the page refreshes with it; closing the chat in the URL opens one that's left
   // ponytail: that open remounts the other panes; a running one reloads from the database once its turn is saved
-  const go = async (next: Pane[]) => {
+  const go = async (next: Pane[], to?: string) => {
     await savePod(pod?.id ?? null, next);
-    const first = next[0];
-    if (!next.some((p) => p.id === focus)) router.replace(`/chat/${first.id}${first.agent ? `?agent=${first.agent}` : ""}`);
+    const open = to ? next.find((p) => p.id === to) : next.some((p) => p.id === focus) ? undefined : next[0];
+    if (open) router.replace(`/chat/${open.id}${open.agent ? `?agent=${open.agent}` : ""}`);
+  };
+  // what the live chat holds, not what the page loaded with: a pane chatted in since is no longer empty
+  const started = (p: LoadedPane) => (status[p.id]?.count ?? p.messages.length) > 0;
+  const pick = (p: LoadedPane) => async (agent: string): Promise<string | void> => {
+    if (agent === p.agent?.id) return;
+    if (!started(p)) return split ? void (await go(replacePane(list, p.id, { id: p.id, agent }))) : router.replace(`/chat/${p.id}?agent=${agent}`);
+    const r = await delegateBrief(p.id).catch(() => ({ error: "Couldn't summarize this chat. Try again." }));
+    if ("error" in r) return r.error;
+    const id = generateId();
+    drafts.set(id, `${r.brief}\n\nYour task: `);
+    setFresh(id);
+    if (!split) return router.push(`/chat/${id}?agent=${agent}`);
+    await go(replacePane(list, p.id, { id, agent }), p.id === focus ? id : undefined);
   };
   const link = (id: string) => (sees: string[], both: boolean) =>
     go(list.map((q) => (q.id === id ? { ...q, sees } : both && sees.includes(q.id) ? { ...q, sees: [...(q.sees ?? []), id] } : q)));
@@ -143,12 +207,28 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
   useEffect(() => {
     if (focus !== first && !matchMedia("(min-width: 48rem)").matches) document.getElementById(`pane-${focus}`)?.scrollIntoView({ inline: "start", block: "nearest" });
   }, [focus, first]);
-  const addAfter = (i: number) => (p: Pane) => go([...list.slice(0, i + 1), p, ...list.slice(i + 1)]);
+  const addAfter = (i: number) => (p: Pane) => (setFresh(p.id), go([...list.slice(0, i + 1), p, ...list.slice(i + 1)]));
+  const close = (i: number) => {
+    refocus.current = (list[i + 1] ?? list[i - 1])?.id;
+    void go(list.filter((_, k) => k !== i));
+  };
+  useEffect(() => {
+    if (!refocus.current || !panes.some((p) => p.id === refocus.current)) return;
+    focusPane(refocus.current);
+    refocus.current = undefined;
+  }, [panes]);
+  // background panes speak up: a screen reader hears when one needs you or finishes
+  const onStatus = (p: LoadedPane) => (st: PaneStatus) => {
+    const was = status[p.id]?.state;
+    if (split && was && was !== st.state && (st.state === "needs" || was === "working"))
+      setSaid(st.state === "needs" ? `${nameOf(p)} needs you` : `${nameOf(p)} finished`);
+    setStatus((prev) => ({ ...prev, [p.id]: st }));
+  };
   // desktop: maximize it; phone: swipe to it
   const show = (id: string) => {
     setOverview(false);
     if (matchMedia("(min-width: 48rem)").matches) setMax(id);
-    else document.getElementById(`pane-${id}`)?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+    else document.getElementById(`pane-${id}`)?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", inline: "start", block: "nearest" });
   };
 
   const working = panes.filter((p) => status[p.id]?.state === "working").length;
@@ -166,7 +246,17 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
 
   return (
     <div className="flex h-full flex-col">
-      {split && (
+      <div aria-live="polite" className="sr-only">{said}</div>
+      {/* opened with ?; hidden until it takes keyboard focus */}
+      <Dialog id="shortcuts" label="Keyboard shortcuts" title="Keyboard shortcuts" className="btn sr-only text-xs focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-30">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+          {SHORTCUTS.map(([k, what]) => <div key={k} className="contents"><dt className="font-mono text-xs leading-5">{k}</dt><dd className="text-mute">{what}</dd></div>)}
+        </dl>
+      </Dialog>
+      {zen && (
+        <button onClick={() => setZen(false)} className="btn glass fixed left-1/2 top-2 z-30 -translate-x-1/2 text-xs opacity-40 transition-opacity hover:opacity-100 focus:opacity-100">Exit zen mode</button>
+      )}
+      {split && !zen && (
         <div className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
           {pod && (
             <input
@@ -193,12 +283,17 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
             <button onClick={() => show(needs[0].id)} className="chip shrink-0 border-accent">{needs.length} need{needs.length === 1 ? "s" : ""} you</button>
           )}
           <span className="flex-1" />
+          <button onClick={() => setZen(true)} className="btn shrink-0 text-xs">Zen mode</button>
           <button onClick={() => setOverview(!overview)} aria-label="Overview" aria-pressed={overview} className={`btn grid h-8 w-8 place-items-center p-0 md:hidden ${overview ? "bg-surface-2" : ""}`}><GridIcon /></button>
         </div>
       )}
       {/* one pane: no pane chrome, just this button where the pane header would be */}
-      {!split && panes[0] && (
-        <SplitMenu from={panes[0]} agents={agents} closed={closed} add={addAfter(0)} className="btn glass fixed right-4 top-2.5 z-20 grid h-9 w-9 place-items-center p-0 md:top-4" />
+      {!split && !zen && panes[0] && (
+        <div className="fixed right-4 top-2.5 z-20 flex items-center gap-2 md:top-4">
+          <AgentPicker pane={panes[0]} agents={agents} started={started(panes[0])} pick={pick(panes[0])} className="btn glass h-9 max-w-40 truncate py-0 text-xs" />
+          <button onClick={() => setZen(true)} className="btn glass h-9 py-0 text-xs">Zen mode</button>
+          <SplitMenu from={panes[0]} agents={agents} closed={closed} add={addAfter(0)} className="btn glass grid h-9 w-9 place-items-center p-0" />
+        </div>
       )}
       <div className="relative flex min-h-0 flex-1">
         <div
@@ -212,14 +307,15 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
               <section
                 key={p.id}
                 id={`pane-${p.id}`}
-                aria-label={p.agent?.name ?? "Chat"}
+                aria-label={`${nameOf(p)}: ${p.title || "New chat"}`}
                 style={place(p.id, i)}
-                className={`flex h-full w-full shrink-0 snap-start flex-col overflow-hidden md:w-auto md:[grid-column:var(--c)] md:[grid-row:var(--r)] lg:[grid-column:var(--cl)] ${split ? `md:rounded-lg md:border ${s === "needs" ? "md:border-accent" : "md:border-line"}` : ""}`}
+                className={`group/pane flex h-full w-full shrink-0 snap-start flex-col overflow-hidden md:w-auto md:[grid-column:var(--c)] md:[grid-row:var(--r)] lg:[grid-column:var(--cl)] ${split ? `md:rounded-lg md:border ${s === "needs" ? "md:border-accent" : "md:border-line"}` : ""}`}
               >
                 {split && (
-                  <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line px-3 text-xs">
-                    <span title={label(s)} className={`size-2 shrink-0 rounded-full ${dot(s)}`} />
-                    <span className="shrink-0 font-medium">{nameOf(p)}</span>
+                  // zen: the header fades out until you point at the pane or tab into it (always there on touch)
+                  <div className={`flex h-9 shrink-0 items-center gap-2 border-b border-line px-3 text-xs ${zen ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover/pane:opacity-100 pointer-coarse:opacity-100" : ""}`}>
+                    <span title={label(s)} className={`size-2 shrink-0 rounded-full ${dot(s)}`}><span className="sr-only">{label(s)}</span></span>
+                    <AgentPicker pane={p} agents={agents} started={started(p)} pick={pick(p)} className="max-w-32 shrink-0 truncate rounded-ctl bg-transparent font-medium hover:bg-hover" />
                     <span className="min-w-0 flex-1 truncate text-mute">
                       {p.sees?.length ? `↳ sees ${panes.filter((o) => p.sees!.includes(o.id)).map(nameOf).join(", ")} · ` : ""}{p.title}
                     </span>
@@ -229,11 +325,11 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
                       {maxed === p.id ? <MinimizeIcon className="h-3.5 w-3.5" /> : <MaximizeIcon className="h-3.5 w-3.5" />}
                     </button>
                     {/* closing a pane doesn't stop its run: like closing a tab, it finishes and is saved */}
-                    <button onClick={() => go(list.filter((q) => q.id !== p.id))} aria-label="Close pane" title="Close pane" className="grid h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg pointer-coarse:size-8"><XIcon className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => close(i)} aria-label="Close pane" title="Close pane" className="grid h-6 w-6 place-items-center rounded-ctl text-mute hover:bg-hover hover:text-fg pointer-coarse:size-8"><XIcon className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
                 <div className="min-h-0 flex-1">
-                  <Chat compact={split} id={p.id} initialMessages={p.messages} agent={p.agent} canAlwaysAllow={canAlwaysAllow} onStatus={(st) => setStatus((prev) => ({ ...prev, [p.id]: st }))} />
+                  <Chat compact={split} focus={p.id === fresh} id={p.id} initialMessages={p.messages} agent={p.agent} canAlwaysAllow={canAlwaysAllow} onStatus={onStatus(p)} />
                 </div>
               </section>
             );
@@ -245,8 +341,8 @@ export function Multiplex({ pod, focus, panes, agents, threads, canAlwaysAllow }
             {panes.map((p) => (
               <button key={p.id} onClick={() => show(p.id)} className={`card space-y-1.5 !p-3 text-left ${status[p.id]?.state === "needs" ? "border-accent" : ""}`}>
                 <div className="flex items-center gap-2 text-xs">
-                  <span className={`size-2 shrink-0 rounded-full ${dot(status[p.id]?.state)}`} />
-                  <span className="truncate font-medium">{p.agent?.name ?? "orb"}</span>
+                  <span className={`size-2 shrink-0 rounded-full ${dot(status[p.id]?.state)}`}><span className="sr-only">{label(status[p.id]?.state)}: </span></span>
+                  <span className="truncate font-medium">{nameOf(p)}</span>
                 </div>
                 <p className="line-clamp-3 text-xs text-mute">{status[p.id]?.snippet || p.title || label(status[p.id]?.state)}</p>
               </button>

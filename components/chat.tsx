@@ -11,7 +11,7 @@ import { FILE_TYPES, MAX_FILE_BYTES } from "@/lib/files";
 
 type ChatAgent = { id: string; name: string; description: string };
 /** What a multiplex pane shows about its chat: working, waiting on you (approval or form), or idle, plus the last reply line. */
-export type PaneStatus = { state: "idle" | "working" | "needs"; snippet: string };
+export type PaneStatus = { state: "idle" | "working" | "needs"; snippet: string; count: number }; // count: messages so far
 
 // plain-language labels for built-in tools; anything else (MCP tools) shows its own name
 // the opening line of an empty chat; picked from the chat id so server and client render the same one
@@ -95,9 +95,10 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, onStatus }: {
+export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, focus, onStatus }: {
   id: string; initialMessages: ChatMessage[]; agent?: ChatAgent; canAlwaysAllow?: boolean;
   compact?: boolean; // a multiplex pane: tighter, no starters, doesn't grab focus
+  focus?: boolean; // a pane just split off: its composer takes focus anyway
   onStatus?: (s: PaneStatus) => void;
 }) {
   const router = useRouter();
@@ -147,7 +148,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, onSt
   const waiting = !busy && last?.role === "assistant" && last.parts.some((p) => isToolUIPart(p) && (p.state === "approval-requested" || p.state === "input-available"));
   const snippet = last?.role === "assistant" ? (last.parts.findLast((p) => p.type === "text")?.text ?? "").slice(-140) : "";
   const report = useEffectEvent((s: PaneStatus) => onStatus?.(s));
-  useEffect(() => report({ state: busy ? "working" : waiting ? "needs" : "idle", snippet }), [busy, waiting, snippet]);
+  useEffect(() => report({ state: busy ? "working" : waiting ? "needs" : "idle", snippet, count: messages.length }), [busy, waiting, snippet, messages.length]);
 
   useEffect(() => {
     if (stick.current) end.current?.scrollIntoView({ block: "end" });
@@ -304,7 +305,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, onSt
             }}
             placeholder={agent ? `Message ${agent.name}` : "Message"}
             aria-label="Message"
-            autoFocus={!compact || drafts.has(id)}
+            autoFocus={!compact || focus || drafts.has(id)}
             suppressHydrationWarning
           />
           {busy ? (

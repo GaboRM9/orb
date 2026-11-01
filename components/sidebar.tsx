@@ -2,7 +2,8 @@
 import { generateId } from "ai";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
+import { usePref } from "@/lib/pref";
 import { deletePod, deleteThread, savePod } from "@/lib/actions";
 import { MAX_PANES, type Pod } from "@/lib/multiplex";
 import { Dialog } from "./dialog";
@@ -13,20 +14,6 @@ type Thread = { id: string; title: string; updated: number };
 
 // [label, href, icon, path prefix that keeps the tab highlighted]
 const tabs = [["Inbox", "/inbox", InboxIcon, "/inbox"], ["Agents", "/agents", BotIcon, "/agents"], ["Library", "/library", BookIcon, "/library"], ["Settings", "/settings", GearIcon, "/settings"]] as const;
-
-// collapsed state lives in localStorage; the server renders expanded
-const listeners = new Set<() => void>();
-const readCollapsed = () => {
-  try { return localStorage.getItem("sidebar") === "collapsed"; } catch { return false; }
-};
-const subscribe = (cb: () => void) => {
-  listeners.add(cb);
-  return () => { listeners.delete(cb); };
-};
-const toggleCollapsed = () => {
-  try { localStorage.setItem("sidebar", readCollapsed() ? "expanded" : "collapsed"); } catch {}
-  listeners.forEach((cb) => cb());
-};
 
 // Below md the sidebar is a drawer behind a top bar; from md up it's the column (or the icon rail when collapsed).
 // The collapsed classes are md-only so the drawer always shows labels.
@@ -48,8 +35,9 @@ export function Sidebar({ threads, pods, waiting }: { threads: Thread[]; pods: P
     ...threads.filter((t) => !podOf.has(t.id)).map((t) => ({ thread: t, at: t.updated })),
   ].sort((a, b) => b.at - a.at).slice(0, 30);
   const needs = new Set(waiting);
-  const dot = <span aria-label="Needs you" className="mr-2 inline-block size-2 rounded-full bg-accent" />;
-  const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false);
+  const dot = <span className="mr-2 inline-block size-2 rounded-full bg-accent"><span className="sr-only">Needs you: </span></span>;
+  const [collapsed, setCollapsed] = usePref("sidebar", "collapsed", "expanded");
+  const [zen] = usePref("zen");
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
   useEffect(() => {
@@ -58,6 +46,7 @@ export function Sidebar({ threads, pods, waiting }: { threads: Thread[]; pods: P
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+  if (zen && current) return null; // zen mode: a chat page is only its chats
   const item = (on: boolean) => `block truncate px-3 py-2 text-sm transition-colors ${on ? "bg-surface-2" : "hover:bg-hover"}`;
   const on = (prefix: string) => path.startsWith(prefix);
   const hideWhenCollapsed = collapsed ? "md:hidden" : "";
@@ -149,7 +138,7 @@ export function Sidebar({ threads, pods, waiting }: { threads: Thread[]; pods: P
             </Link>
           ))}
           <button
-            onClick={toggleCollapsed}
+            onClick={() => setCollapsed(!collapsed)}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={`btn mt-2 hidden place-items-center p-0 md:grid md:size-10 ${collapsed ? "md:mx-auto" : ""}`}
