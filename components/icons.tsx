@@ -21,6 +21,7 @@ export const GridIcon = svg(<><rect width="7" height="7" x="3" y="3" rx="1" /><r
 export const SplitIcon = svg(<><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M12 3v18" /></>);
 export const MaximizeIcon = svg(<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />);
 export const MinimizeIcon = svg(<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />);
+export const InboxIcon = svg(<><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></>);
 export const MenuIcon = svg(<path d="M4 6h16M4 12h16M4 18h16" />);
 // the logo: a plain ring, the "o" of orb. Decorative unless given a label.
 export const OrbIcon = ({ className = "h-4 w-4", label }: { className?: string; label?: string }) => (

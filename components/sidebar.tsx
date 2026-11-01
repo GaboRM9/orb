@@ -6,12 +6,12 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { deleteThread } from "@/lib/actions";
 import { chatHref, MAX_PANES, panesOf } from "@/lib/multiplex";
 import { Submit } from "./submit";
-import { BookIcon, BotIcon, GearIcon, MenuIcon, OrbIcon, PanelLeftIcon, PlusIcon, XIcon } from "./icons";
+import { BookIcon, BotIcon, GearIcon, InboxIcon, MenuIcon, OrbIcon, PanelLeftIcon, PlusIcon, XIcon } from "./icons";
 
 type Thread = { id: string; title: string };
 
 // [label, href, icon, path prefix that keeps the tab highlighted]
-const tabs = [["Agents", "/agents", BotIcon, "/agents"], ["Library", "/library", BookIcon, "/library"], ["Settings", "/settings", GearIcon, "/settings"]] as const;
+const tabs = [["Inbox", "/inbox", InboxIcon, "/inbox"], ["Agents", "/agents", BotIcon, "/agents"], ["Library", "/library", BookIcon, "/library"], ["Settings", "/settings", GearIcon, "/settings"]] as const;
 
 // collapsed state lives in localStorage; the server renders expanded
 const listeners = new Set<() => void>();
@@ -29,7 +29,7 @@ const toggleCollapsed = () => {
 
 // Below md the sidebar is a drawer behind a top bar; from md up it's the column (or the icon rail when collapsed).
 // The collapsed classes are md-only so the drawer always shows labels.
-export function Sidebar({ threads }: { threads: Thread[] }) {
+export function Sidebar({ threads, waiting }: { threads: Thread[]; waiting: number }) {
   const path = usePathname();
   const router = useRouter();
   const params = useSearchParams();
@@ -100,11 +100,14 @@ export function Sidebar({ threads }: { threads: Thread[] }) {
               key={label}
               href={href}
               onClick={close}
-              aria-label={collapsed ? label : undefined}
+              aria-label={collapsed || (href === "/inbox" && waiting) ? `${label}${href === "/inbox" && waiting ? `, ${waiting} waiting` : ""}` : undefined}
               title={collapsed ? label : undefined}
-              className={`${item(on(prefix))} flex items-center gap-3 rounded-ctl !px-3 ${rail}`}
+              className={`${item(on(prefix))} relative flex items-center gap-3 rounded-ctl !px-3 ${rail}`}
             >
               <Icon className="h-5 w-5" /><span className={hideWhenCollapsed}>{label}</span>
+              {href === "/inbox" && waiting > 0 && (
+                <span className={`ml-auto min-w-5 rounded-full bg-accent px-1.5 text-center text-xs leading-5 text-on-accent ${collapsed ? "md:absolute md:-right-1 md:-top-1 md:ml-0" : ""}`}>{waiting}</span>
+              )}
             </Link>
           ))}
           <button
