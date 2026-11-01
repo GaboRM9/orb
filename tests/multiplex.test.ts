@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { normalize, rowSizes, spans } from "../lib/multiplex";
+import { normalize, replacePane, rowSizes, spans } from "../lib/multiplex";
 
 describe("multiplex", () => {
   it("normalizes a pod's panes: no junk, duplicates or more than 10; links only to other panes of the pod", () => {
@@ -9,6 +9,11 @@ describe("multiplex", () => {
       { id: "b2" },
     ]);
     assert.equal(normalize(Array.from({ length: 12 }, (_, i) => ({ id: `t${i}` }))).length, 10);
+  });
+
+  it("a hand-off takes the old pane's slot and links, and whoever read the old chat reads the new one", () => {
+    const pod = [{ id: "a", agent: "x", sees: ["b"] }, { id: "b" }, { id: "c", sees: ["a", "b"] }];
+    assert.deepEqual(replacePane(pod, "a", { id: "n", agent: "y" }), [{ id: "n", agent: "y", sees: ["b"] }, { id: "b", sees: undefined }, { id: "c", sees: ["n", "b"] }]);
   });
 
   it("splits panes into even rows that fill the screen", () => {

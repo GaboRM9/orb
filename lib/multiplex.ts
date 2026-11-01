@@ -16,6 +16,10 @@ export function normalize(panes: Pane[]): Pane[] {
   });
 }
 
+/** Puts `pane` in `oldId`'s slot (a hand-off to another agent): it keeps that slot's links, and whoever read the old chat reads the new one. */
+export const replacePane = (panes: Pane[], oldId: string, pane: Pane): Pane[] =>
+  panes.map((p) => (p.id === oldId ? { ...pane, sees: p.sees } : { ...p, sees: p.sees?.map((s) => (s === oldId ? pane.id : s)) }));
+
 /** Panes per row: rows as even as possible, the top rows take the extra one. Wide screens: ≤3 one row, ≤8 two, else three. */
 export function rowSizes(n: number, maxCols: number) {
   const rows = maxCols >= 4 ? (n <= 3 ? 1 : n <= 8 ? 2 : 3) : Math.ceil(n / maxCols);

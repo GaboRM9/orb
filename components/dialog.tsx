@@ -3,12 +3,12 @@ import { useRef } from "react";
 import { XIcon } from "./icons";
 
 /** A button that opens a native modal <dialog>; Esc, the ✕ and a click on the backdrop close it. */
-export function Dialog({ label, title, className = "btn text-xs", children }: { label: React.ReactNode; title: string; className?: string; children: React.ReactNode }) {
+export function Dialog({ id, label, title, className = "btn text-xs", children }: { id?: string; label: React.ReactNode; title: string; className?: string; children: React.ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   return (
     <>
       {/* an icon trigger is named after its dialog */}
-      <button type="button" aria-label={typeof label === "string" ? undefined : title} className={className} onClick={() => ref.current?.showModal()}>{label}</button>
+      <button id={id} type="button" aria-label={typeof label === "string" ? undefined : title} className={className} onClick={() => ref.current?.showModal()}>{label}</button>
       <dialog
         ref={ref}
         aria-label={title}
