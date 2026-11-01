@@ -48,7 +48,7 @@ export function Sidebar({ threads, pods, waiting }: { threads: Thread[]; pods: P
     ...threads.filter((t) => !podOf.has(t.id)).map((t) => ({ thread: t, at: t.updated })),
   ].sort((a, b) => b.at - a.at).slice(0, 30);
   const needs = new Set(waiting);
-  const dot = <span aria-label="Needs you" className="mr-2 inline-block size-2 rounded-full bg-accent" />;
+  const dot = <span className="mr-2 inline-block size-2 rounded-full bg-accent"><span className="sr-only">Needs you: </span></span>;
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false);
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);

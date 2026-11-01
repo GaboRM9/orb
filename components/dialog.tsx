@@ -7,7 +7,8 @@ export function Dialog({ label, title, className = "btn text-xs", children }: { 
   const ref = useRef<HTMLDialogElement>(null);
   return (
     <>
-      <button type="button" className={className} onClick={() => ref.current?.showModal()}>{label}</button>
+      {/* an icon trigger is named after its dialog */}
+      <button type="button" aria-label={typeof label === "string" ? undefined : title} className={className} onClick={() => ref.current?.showModal()}>{label}</button>
       <dialog
         ref={ref}
         aria-label={title}

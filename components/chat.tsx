@@ -95,9 +95,10 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, onStatus }: {
+export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, focus, onStatus }: {
   id: string; initialMessages: ChatMessage[]; agent?: ChatAgent; canAlwaysAllow?: boolean;
   compact?: boolean; // a multiplex pane: tighter, no starters, doesn't grab focus
+  focus?: boolean; // a pane just split off: its composer takes focus anyway
   onStatus?: (s: PaneStatus) => void;
 }) {
   const router = useRouter();
@@ -304,7 +305,7 @@ export function Chat({ id, initialMessages, agent, canAlwaysAllow, compact, onSt
             }}
             placeholder={agent ? `Message ${agent.name}` : "Message"}
             aria-label="Message"
-            autoFocus={!compact || drafts.has(id)}
+            autoFocus={!compact || focus || drafts.has(id)}
             suppressHydrationWarning
           />
           {busy ? (
