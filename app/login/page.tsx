@@ -18,8 +18,8 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const firstRun = authConfigured() && !(await hasUsers());
   return (
     <div className="mx-auto flex h-full max-w-sm flex-col justify-center gap-4 px-6">
-      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="7" className="halo mx-auto size-64 max-w-full" aria-hidden>
-        <circle cx="32" cy="32" r="24" pathLength="1" />
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="7" className="mx-auto size-16" aria-hidden>
+        <circle cx="32" cy="32" r="24" />
       </svg>
       <h1>{firstRun ? "Set up orb" : "Sign in"}</h1>
       {!authConfigured() ? (
