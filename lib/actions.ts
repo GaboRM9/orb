@@ -11,7 +11,9 @@ import { listCases, MAX_CASES, runEval } from "./evals";
 import type { McpServer } from "./db";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateId, generateText } from "ai";
-import { loadChat } from "./chat-store";
+import { transcriptOf } from "./chat-store";
+import { dropFromPod, getPod, renamePod as rename, savePanes, setPodGoal } from "./pods";
+import type { Pane } from "./multiplex";
 import { budgetError, logRun } from "./runs";
 import { EVERY, fire, runnable, validTz } from "./schedules";
 import { decide } from "./turn";
@@ -55,7 +57,11 @@ export async function clearKey(k: (typeof KEYS)[number]) {
 export async function clearThreads() {
   await requireAuth();
   const [w, u] = [await ws(), await me()];
-  await db.batch([["delete from messages where thread_id in (select id from threads where workspace_id=? and user_id=?)", w, u], ["delete from threads where workspace_id=? and user_id=?", w, u]]);
+  await db.batch([
+    ["delete from messages where thread_id in (select id from threads where workspace_id=? and user_id=?)", w, u],
+    ["delete from threads where workspace_id=? and user_id=?", w, u],
+    ["delete from pods where workspace_id=? and user_id=?", w, u],
+  ]);
   redirect("/agents");
 }
 
@@ -64,6 +70,45 @@ export async function deleteThread(id: string, backTo: string) {
   await requireAuth();
   const [w, u] = [await ws(), await me()];
   await db.batch([["delete from messages where thread_id in (select id from threads where id=? and workspace_id=? and user_id=?)", id, w, u], ["delete from threads where id=? and workspace_id=? and user_id=?", id, w, u]]);
+  await dropFromPod(id);
+  revalidatePath("/", "layout");
+  redirect(backTo);
+}
+
+/** Split, close, reorder or link panes: the pod's whole pane list (a new pod when `id` is null). Returns the pod's id, or null once it's one chat again. */
+export async function savePod(id: string | null, panes: Pane[]) {
+  await requireAuth();
+  const pod = await savePanes(id, panes);
+  revalidatePath("/", "layout");
+  return pod;
+}
+
+export async function renamePod(id: string, title: string) {
+  await requireAuth();
+  await rename(id, title);
+  revalidatePath("/", "layout");
+}
+
+export async function savePodGoal(id: string, goal: string) {
+  await requireAuth();
+  await setPodGoal(id, goal);
+  revalidatePath("/", "layout");
+}
+
+/** Deletes a pod; its chats go too, or stay on as chats of their own. */
+export async function deletePod(id: string, withChats: boolean, backTo: string) {
+  await requireAuth();
+  const [w, u, pod] = [await ws(), await me(), await getPod(id)];
+  if (!pod) redirect(backTo);
+  const ids = pod.panes.map((p) => p.id);
+  const list = ids.map(() => "?").join(",");
+  await db.batch([
+    ...(withChats ? [
+      [`delete from messages where thread_id in (select id from threads where workspace_id=? and user_id=? and id in (${list}))`, w, u, ...ids],
+      [`delete from threads where workspace_id=? and user_id=? and id in (${list})`, w, u, ...ids],
+    ] as [string, ...unknown[]][] : []),
+    ["delete from pods where id=? and workspace_id=? and user_id=?", id, w, u],
+  ]);
   revalidatePath("/", "layout");
   redirect(backTo);
 }
@@ -312,14 +357,7 @@ const BRIEF_MODEL = "claude-haiku-5-5";
  */
 export async function delegateBrief(threadId: string): Promise<{ brief: string } | { error: string }> {
   const { uid } = await requireAuth();
-  // ponytail: text only, newest ~60k chars; tool output and attachments stay behind
-  const transcript = (await loadChat(threadId))
-    .flatMap((m) => {
-      const t = m.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
-      return t ? [`${m.role === "user" ? "User" : "Assistant"}: ${t}`] : [];
-    })
-    .join("\n\n")
-    .slice(-60_000);
+  const transcript = await transcriptOf(threadId, 60_000);
   if (!transcript) return { error: "Nothing to delegate yet: send a message first." };
   const apiKey = open(await getSetting("api_key")) || (await envKey("ANTHROPIC_API_KEY"));
   if (!apiKey) return { error: "Set your Anthropic API key in Library → Connections." };

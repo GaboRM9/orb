@@ -116,6 +116,10 @@ async function init() {
       every text not null check (every in ('hourly','daily','weekdays')), hour integer not null default 9, tz text not null,
       enabled integer not null default 1, created integer not null, last_run integer, last_thread text, last_error text);
     create index if not exists schedules_ws on schedules(workspace_id, user_id);
+    create table if not exists pods (
+      id text primary key, workspace_id text not null, user_id text not null, title text,
+      panes_json text not null, updated integer not null);
+    create index if not exists pods_user on pods(workspace_id, user_id, updated desc);
     create index if not exists runs_thread on runs(thread_id, started desc);
   `);
   const cols = async (table: string) => ((await all(c, `pragma table_info(${table})`, [])) as { name: string }[]).map((x) => x.name);
@@ -138,6 +142,7 @@ async function init() {
     ["runs", "user_id", "text"],
     ["approvals", "user_id", "text"],
     ["eval_results", "user_id", "text"],
+    ["pods", "goal", "text"],
   ])
     if (!(await cols(table)).includes(col)) await c.execute(`alter table ${table} add column ${col} ${ddl}`).catch(() => {}); // lost a race: the column exists now
   // single-tenant databases: rebuild with workspace-scoped unique keys; every existing row lands in the first workspace.

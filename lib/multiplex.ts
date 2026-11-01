@@ -1,27 +1,19 @@
-// A split chat lives in its URL: /chat/a?agent=x&with=b.agentId,c,… (an agent only matters for a thread with no history yet)
+// A pod's panes and their layout; client-safe (lib/pods.ts saves them)
+// A pane's `sees` lists the panes of the same pod its agent may read (readPane): one-way, off by default.
 export const MAX_PANES = 10;
-export type Pane = { id: string; agent?: string };
+export type Pane = { id: string; agent?: string; sees?: string[] };
+export type Pod = { id: string; title: string | null; goal: string | null; panes: Pane[]; updated: number };
 
 const ID = /^[\w-]{1,64}$/;
-export function parsePanes(p: unknown): Pane[] {
+/** Drops junk ids, duplicates and anything past 10; a pane only sees other panes of this pod. */
+export function normalize(panes: Pane[]): Pane[] {
   const seen = new Set<string>();
-  return String(p ?? "")
-    .split(",")
-    .flatMap((s) => {
-      const [id, agent] = s.split(".");
-      if (!ID.test(id) || seen.has(id) || (agent && !ID.test(agent))) return [];
-      seen.add(id);
-      return [{ id, agent: agent || undefined }];
-    })
-    .slice(0, MAX_PANES);
-}
-export const formatPanes = (ps: Pane[]) => ps.map((p) => (p.agent ? `${p.id}.${p.agent}` : p.id)).join(",");
-
-/** The panes of /chat/[id]: that chat first, then the ones split off beside it. */
-export const panesOf = (id: string, agent?: string | null, more?: string | null) => parsePanes([agent ? `${id}.${agent}` : id, more].join(","));
-export function chatHref([first, ...rest]: Pane[]) {
-  const q = [first.agent && `agent=${first.agent}`, rest.length && `with=${formatPanes(rest)}`].filter(Boolean).join("&");
-  return `/chat/${first.id}${q ? `?${q}` : ""}`;
+  const kept = panes.filter((p) => typeof p?.id === "string" && ID.test(p.id) && !seen.has(p.id) && seen.add(p.id)).slice(0, MAX_PANES);
+  const ids = new Set(kept.map((p) => p.id));
+  return kept.map(({ id, agent, sees }) => {
+    const s = [...new Set(Array.isArray(sees) ? sees : [])].filter((x) => x !== id && ids.has(x));
+    return { id, ...(typeof agent === "string" && ID.test(agent) ? { agent } : {}), ...(s.length ? { sees: s } : {}) };
+  });
 }
 
 /** Panes per row: rows as even as possible, the top rows take the extra one. Wide screens: ≤3 one row, ≤8 two, else three. */
