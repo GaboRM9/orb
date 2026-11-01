@@ -10,10 +10,15 @@ process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "schedules-")), "test.db")
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.ADMIN_PASSWORD = "test-pass";
 
-// a fake Anthropic API that answers "pong"
+// a fake Anthropic API that answers "pong", or fails a request that mentions "boom"
 const fake = http.createServer((req, res) => {
-  req.resume();
+  let body = "";
+  req.on("data", (c) => (body += c));
   req.on("end", () => {
+    if (body.includes("boom")) {
+      res.writeHead(400, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "boom from the API" } }));
+    }
     const ev = (e: string, d: object) => `event: ${e}\ndata: ${JSON.stringify({ type: e, ...d })}\n\n`;
     res.writeHead(200, { "content-type": "text/event-stream" });
     res.end(
@@ -43,24 +48,30 @@ const s = (o: Partial<import("../lib/schedules").Schedule>) =>
   ({ every: "daily", hour: 9, tz: "UTC", created: at("2026-10-01T00:00Z"), last_run: null, ...o }) as import("../lib/schedules").Schedule;
 
 describe("isDue", () => {
+  const ran = (iso: string) => ({ last_run: at(iso) });
   it("fires a daily schedule from its hour on, once a day", () => {
-    assert.equal(sch.isDue(s({}), at("2026-10-28T08:59Z")), false);
-    assert.equal(sch.isDue(s({}), at("2026-10-28T09:00Z")), true);
-    assert.equal(sch.isDue(s({ last_run: at("2026-10-28T09:00Z") }), at("2026-10-28T10:00Z")), false, "already ran today");
-    assert.equal(sch.isDue(s({ last_run: at("2026-10-27T09:00Z") }), at("2026-10-28T15:00Z")), true, "a missed tick catches up");
+    assert.equal(sch.isDue(s(ran("2026-10-27T09:00Z")), at("2026-10-28T08:59Z")), false);
+    assert.equal(sch.isDue(s(ran("2026-10-27T09:00Z")), at("2026-10-28T09:00Z")), true);
+    assert.equal(sch.isDue(s(ran("2026-10-28T09:00Z")), at("2026-10-28T10:00Z")), false, "already ran today");
   });
-  it("starts tomorrow when made after today's hour", () => {
+  it("catches up the latest missed slot, so a once-a-day cron at any hour still runs it", () => {
+    assert.equal(sch.isDue(s(ran("2026-10-26T09:00Z")), at("2026-10-28T08:00Z")), true, "yesterday's 9:00 was missed");
+    assert.equal(sch.isDue(s(ran("2026-10-27T09:30Z")), at("2026-10-28T08:00Z")), false, "yesterday's ran; today's hasn't come");
+  });
+  it("starts with the next slot when made after today's hour", () => {
     assert.equal(sch.isDue(s({ created: at("2026-10-28T15:00Z") }), at("2026-10-28T16:00Z")), false);
     assert.equal(sch.isDue(s({ created: at("2026-10-28T15:00Z") }), at("2026-10-29T09:00Z")), true);
   });
   it("reads the hour in the schedule's timezone", () => {
-    const ny = s({ tz: "America/New_York" }); // 9:00 in New York is 13:00 UTC in October (EDT)
+    const ny = s({ tz: "America/New_York", ...ran("2026-10-27T13:00Z") }); // 9:00 in New York is 13:00 UTC in October (EDT)
     assert.equal(sch.isDue(ny, at("2026-10-28T12:30Z")), false);
     assert.equal(sch.isDue(ny, at("2026-10-28T13:00Z")), true);
   });
   it("skips weekends for weekdays", () => {
-    assert.equal(sch.isDue(s({ every: "weekdays" }), at("2026-10-31T09:00Z")), false, "Saturday");
-    assert.equal(sch.isDue(s({ every: "weekdays" }), at("2026-11-02T09:00Z")), true, "Monday");
+    const fri = s({ every: "weekdays", ...ran("2026-10-30T09:00Z") });
+    assert.equal(sch.isDue(fri, at("2026-10-31T12:00Z")), false, "Saturday");
+    assert.equal(sch.isDue(fri, at("2026-11-02T08:00Z")), false, "Monday before 9: the latest weekday slot (Friday) ran");
+    assert.equal(sch.isDue(fri, at("2026-11-02T09:00Z")), true, "Monday");
   });
   it("fires hourly once per clock hour", () => {
     const h = s({ every: "hourly", last_run: at("2026-10-28T09:00Z") });
@@ -120,5 +131,31 @@ describe("decide (Inbox approve/deny)", () => {
     const row = (await as(() => runs.listApprovals("u1"))).find((a) => a.approval_id === "ap9")!;
     assert.equal(row.decision, "denied");
     assert.equal(await turn.decide("default", "u1", "ap9", true), "Already decided.");
+  });
+});
+
+describe("failures and double decisions", () => {
+  const as = <T,>(fn: () => T) => dbm.inWorkspace("default", () => dbm.asUser("u1", fn));
+  it("records a run whose model call fails as failed, though the response was a 200", async () => {
+    await dbm.db.prepare("insert into schedules (id,workspace_id,user_id,agent_id,prompt,every,hour,tz,created) values ('sb','default','u1','assistant','boom','hourly',0,'UTC',0)").run();
+    const r = await sch.fire((await sch.runnable("sb"))!);
+    assert.match(r!.error ?? "", /boom from the API/);
+    const got = (await dbm.db.prepare("select last_error from schedules where id='sb'").get()) as { last_error: string };
+    assert.match(got.last_error, /boom/);
+  });
+  it("refuses to run a schedule whose agent is gone", async () => {
+    await dbm.db.prepare("insert into schedules (id,workspace_id,user_id,agent_id,prompt,every,hour,tz,created) values ('sx','default','u1','nope','ping','hourly',0,'UTC',0)").run();
+    assert.equal(await sch.runnable("sx"), undefined);
+    assert.ok(await sch.runnable("sb"));
+  });
+  it("runs an approved tool once: a second answer to the same card is refused", async () => {
+    const [turn, runs] = await Promise.all([import("../lib/turn"), import("../lib/runs")]);
+    const card = (state: string, approved?: boolean) => ({ id: "m2", role: "assistant", parts: [{ type: "step-start" },
+      { type: "tool-fetchUrl", toolCallId: "toolu_8", state, input: { url: "https://example.com" }, approval: { id: "ap8", ...(approved !== undefined && { approved }) } }] }) as import("ai").UIMessage;
+    const chat = [{ id: "m1", role: "user", parts: [{ type: "text", text: "read it" }] }, card("approval-requested")] as import("ai").UIMessage[];
+    await as(() => store.saveChat("t8", chat, "assistant"));
+    await as(() => runs.syncApprovals("r8", "t8", "assistant", chat[1]));
+    assert.equal(await turn.runToEnd("default", "u1", { id: "t8", message: card("approval-responded", false) }), null, "the first answer runs");
+    assert.equal(await turn.runToEnd("default", "u1", { id: "t8", message: card("approval-responded", false) }), "Already decided.", "the second (another tab) doesn't");
   });
 });

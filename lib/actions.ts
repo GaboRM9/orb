@@ -13,7 +13,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateId, generateText } from "ai";
 import { loadChat } from "./chat-store";
 import { budgetError, logRun } from "./runs";
-import { EVERY, fire, validTz, type Schedule } from "./schedules";
+import { EVERY, fire, runnable, validTz } from "./schedules";
 import { decide } from "./turn";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -373,11 +373,15 @@ export async function deleteSchedule(id: string) {
 
 /** Runs a schedule now (it runs as its creator), then opens the chat it made, or shows why it didn't run. */
 export async function runScheduleNow(id: string) {
-  const row = (await db.prepare(`select * from schedules where id=@id and ${mineOrAdmin}`).get(await scheduleScope(id))) as Schedule | undefined;
-  if (!row) return;
-  const thread = await fire(row);
+  if (!(await db.prepare(`select 1 from schedules where id=@id and ${mineOrAdmin}`).get(await scheduleScope(id)))) return;
+  const row = await runnable(id); // the cron's rules: its creator still a member, its agent still there
+  if (!row) {
+    await db.prepare("update schedules set last_error=? where id=?").run("Can't run: its creator left the workspace or its agent was deleted.", id);
+    return revalidatePath("/library");
+  }
+  const r = await fire(row);
   revalidatePath("/", "layout");
-  if (thread && row.user_id === (await me())) redirect(`/chat/${thread}`);
+  if (r?.thread && !r.error && row.user_id === (await me())) redirect(`/chat/${r.thread}`); // a failure shows on the schedule
 }
 
 /** Approve or Deny on an Inbox row: the chat resumes on the server, nobody needs it open. */

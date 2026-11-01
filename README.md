@@ -58,7 +58,7 @@ Each request is one **run**: model, tokens (including cache reads/writes), cost,
 
 A schedule sends an agent a prompt every hour, every day or on weekdays, at an hour in its creator's timezone. Each firing is an ordinary chat turn as the creator, in a new chat of theirs: it counts against their budget, it's logged in Activity, and a tool that needs approval stops on its card. **Inbox** (sidebar, with a count) lists the approvals waiting on you and this week's scheduled runs. **Approve** or **Deny** right there: the chat resumes on the server (the same as clicking its card), so nobody needs it open. If a step has more than one card, it resumes once the last one is answered.
 
-- **Hosted:** `vercel.json` calls `/api/cron` hourly with `Authorization: Bearer $CRON_SECRET`. Set `CRON_SECRET` (any long random string); without it the route refuses everyone. Hourly crons need a Pro plan; on Hobby Vercel runs crons once a day, and every schedule that came due since then catches up on that run.
+- **Hosted:** `vercel.json` calls `/api/cron` with `Authorization: Bearer $CRON_SECRET`. Set `CRON_SECRET` (any long random string); without it the route refuses everyone. It ships as **once a day** (`0 12 * * *`) because Vercel Hobby rejects anything more often; each tick runs every schedule's latest missed slot, so on Hobby a schedule runs up to a day late. On Pro, change it to `0 * * * *` for on-the-hour runs.
 - **Locally** there's no cron: use **Run now**, or `curl -H "Authorization: Bearer $CRON_SECRET" localhost:3100/api/cron`.
 - A schedule whose creator left the workspace, or whose agent was deleted, stops firing. Members see their own schedules; admins see and can change everyone's.
 

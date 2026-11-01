@@ -20,10 +20,23 @@ const STOP_POLL_MS = 500;
 export type Turn = { id: string; message: UIMessage; agentId?: string; context?: unknown };
 
 /**
- * One chat turn as workspace `w` and user `uid`: the chat route streams it to the browser, the scheduler reads it to the end
- * with nobody watching. Either way the chat is saved and the run logged; a tool needing approval ends the turn on its card.
+ * One chat turn as workspace `w` and user `uid`: the chat route streams it to the browser, the scheduler and the Inbox read
+ * it to the end with nobody watching (runToEnd). Either way the chat is saved and the run logged; a tool needing approval
+ * ends the turn on its card.
  */
-export async function runTurn(w: string, uid: string, { id, message, agentId, context }: Turn) {
+export const runTurn = async (w: string, uid: string, t: Turn) => (await turn(w, uid, t)).res;
+
+/** A turn read to the end: null if the run finished, else why not (refused, or the model failed mid-stream). */
+export async function runToEnd(w: string, uid: string, t: Turn) {
+  const { res, done } = await turn(w, uid, t);
+  const body = await res.text(); // reading to the end is what saves the chat
+  return res.ok ? done : body.slice(0, 300); // a mid-stream failure still answers 200: the logged run says how it ended
+}
+
+const turn = (w: string, uid: string, t: Turn) => inWorkspace(w, () => asUser(uid, () => turnIn(w, uid, t)));
+const refuse = (body: string, status: number) => ({ res: new Response(body, { status }), done: Promise.resolve(body) });
+
+async function turnIn(w: string, uid: string, { id, message, agentId, context }: Turn) {
   const started = Date.now();
   // callbacks below can run after the response ends, outside the request: they get the workspace and user explicitly
   const scoped = <T,>(fn: () => T) => inWorkspace(w, () => asUser(uid, fn));
@@ -38,18 +51,23 @@ export async function runTurn(w: string, uid: string, { id, message, agentId, co
     getSetting("model", DEFAULT_MODEL),
   ]);
   const apiKey = open(savedKey) || (await envKey("ANTHROPIC_API_KEY"));
-  if (!apiKey) return new Response("Set your Anthropic API key in Library → Connections.", { status: 400 });
-  if (overBudget) return new Response(overBudget, { status: 429 });
+  if (!apiKey) return refuse("Set your Anthropic API key in Library → Connections.", 400);
+  if (overBudget) return refuse(overBudget, 429);
 
   const badFile = fileError(message);
-  if (badFile) return new Response(badFile, { status: 400 });
+  if (badFile) return refuse(badFile, 400);
   const messages = mergeMessage(saved, message);
   const genUi = genUiSetting !== "off"; // beta switch in Settings: off means plain-text answers
   const runId = generateId();
-  const [{ tools, system, mcp }] = await Promise.all([
+  const [{ tools, system, mcp }, taken] = await Promise.all([
     agentSetup(agent, genUi),
     syncApprovals(runId, id, agent?.id, message), // the user's approve/deny click arrives with this request
   ]);
+  // decided elsewhere first (the Inbox, another tab, a double click): resuming again would run the tool twice
+  if (taken.length) {
+    await mcp.close();
+    return refuse("Already decided.", 409);
+  }
   const mcpDown = mcp.warnings.length ? `Some MCP servers were unreachable this turn (tell the user if relevant): ${mcp.warnings.join("; ")}` : "";
   // tools + the stable system prompt are one cached prefix; the per-turn MCP warning sits after the breakpoint so it can't bust it
   const instructions: SystemModelMessage[] = [{ role: "system", content: system, providerOptions: CACHE }];
@@ -71,13 +89,17 @@ export async function runTurn(w: string, uid: string, { id, message, agentId, co
   const poll = setInterval(() => void scoped(() => stopRequested(id, started)).then((s) => s && stopper.abort(), () => {}), STOP_POLL_MS);
   // ponytail: tokens of a step cut off mid-stream are billed but unseen here; only finished steps are counted
   let usage: Usage | undefined;
+  let settle!: (why: string | null) => void;
+  const done = new Promise<string | null>((r) => (settle = r));
   const finish = async (status: "ok" | "error" | "aborted", error?: unknown) => {
-    clearInterval(poll);
-    await mcp.close();
-    await scoped(() => logRun({
-      id: runId, threadId: id, agentId: agent?.id, model, started, status, calls, usage,
-      error: error == null ? undefined : error instanceof Error ? error.message : String(error),
-    }));
+    const why = error == null ? undefined : error instanceof Error ? error.message : String(error);
+    try {
+      clearInterval(poll);
+      await mcp.close();
+      await scoped(() => logRun({ id: runId, threadId: id, agentId: agent?.id, model, started, status, calls, usage, error: why }));
+    } finally {
+      settle(status === "ok" ? null : (why ?? status));
+    }
   };
 
   const result = scoped(() => streamText({
@@ -105,7 +127,7 @@ export async function runTurn(w: string, uid: string, { id, message, agentId, co
     onAbort: () => void track(finish("aborted")),
   })); // tools run as this user too (searchThreads)
 
-  return createUIMessageStreamResponse({
+  const res = createUIMessageStreamResponse({
     stream: toUIMessageStream({
       stream: result.stream,
       originalMessages: messages,
@@ -118,6 +140,7 @@ export async function runTurn(w: string, uid: string, { id, message, agentId, co
     // drain our own copy of the stream so a closed tab still finishes the turn and saves it (kept alive via after())
     consumeSseStream: ({ stream }) => track(consumeStream({ stream })),
   });
+  return { res, done };
 }
 
 
@@ -138,13 +161,11 @@ export async function decide(w: string, uid: string, approvalId: string, approve
     if (!last?.parts.some(asks)) return "The chat has moved on; open it to see.";
     const message = { ...last, parts: last.parts.map((p) => (asks(p) ? { ...p, state: "approval-responded", approval: { ...p.approval, approved } } : p)) } as UIMessage;
     if (!lastAssistantMessageIsCompleteWithApprovalResponses({ messages: [message] })) {
-      // another card (or a form) in the same step still waits: keep this answer, resume when the last one is in
+      // another card (or a form) in the same step still waits: record this answer (the claim), keep it, resume on the last
+      if ((await syncApprovals(row.run_id, row.thread_id, await threadAgentId(row.thread_id), message)).length) return "Already decided.";
       await saveChat(row.thread_id, mergeMessage(messages, message));
-      await syncApprovals(row.run_id, row.thread_id, await threadAgentId(row.thread_id), message);
       return null;
     }
-    const res = await runTurn(w, uid, { id: row.thread_id, message });
-    const body = await res.text();
-    return res.ok ? null : body.slice(0, 300);
+    return runToEnd(w, uid, { id: row.thread_id, message });
   }));
 }

@@ -1,6 +1,6 @@
 import { generateId } from "ai";
-import { db, inWorkspace, asUser, ws } from "./db";
-import { runTurn } from "./turn";
+import { db, ws } from "./db";
+import { runToEnd } from "./turn";
 
 // Schedules: an agent gets a prompt hourly, daily or on weekdays at an hour in its creator's timezone. Each firing is an
 // ordinary chat turn as the creator, in a new chat of theirs: it uses their budget, and a tool needing approval stops on
@@ -26,17 +26,26 @@ export const validTz = (tz: string) => {
 };
 
 const key = (date: string, hour: number) => `${date} ${String(hour).padStart(2, "0")}`;
+const DAY = 24 * 3600_000;
+
+/** The most recent slot at or before `now`, as a key: this hour, or the latest day (a weekday, for weekdays) whose hour has come. */
+function lastSlot(s: Pick<Schedule, "every" | "hour" | "tz">, now: number) {
+  const n = wallClock(now, s.tz);
+  if (s.every === "hourly") return key(n.date, n.hour);
+  // ponytail: steps back whole days of 24h, so a DST change can name the wrong day in the hour around midnight
+  for (let d = 0; ; d++) {
+    const c = d ? wallClock(now - d * DAY, s.tz) : n;
+    if ((d || c.hour >= s.hour) && !(s.every === "weekdays" && c.weekend)) return key(c.date, s.hour);
+  }
+}
 
 /**
- * Whether a schedule should fire at `now`: its slot (this hour, or today at its hour) has started and it hasn't run, or
- * been created, since. A missed tick catches up later the same day; a daily schedule made after its hour starts tomorrow.
+ * Whether a schedule should fire at `now`: it hasn't run (or been created) since its latest slot. So a late tick, like
+ * the once-a-day cron on Vercel Hobby, still runs the slot it missed; a schedule made after today's slot waits for the next.
  */
 export function isDue(s: Pick<Schedule, "every" | "hour" | "tz" | "created" | "last_run">, now: number) {
-  const n = wallClock(now, s.tz);
-  const slot = s.every === "hourly" ? n.hour : s.hour;
-  if (n.hour < slot || (s.every === "weekdays" && n.weekend)) return false;
   const prev = wallClock(s.last_run ?? s.created, s.tz);
-  return key(prev.date, prev.hour) < key(n.date, slot);
+  return key(prev.date, prev.hour) < lastSlot(s, now);
 }
 
 /** Your schedules (or, for an admin, everyone's in the workspace), with the agent's name. */
@@ -48,37 +57,39 @@ export const listSchedules = async (user: string | null) =>
 
 /**
  * Fires one schedule now. Claims it first (last_run moves only if nobody else moved it), so two overlapping ticks can't
- * both run it. Returns the new chat's id, or null if another tick had it.
+ * both run it. Returns the new chat (if one was saved) and why the run failed, or null if another tick had it.
  */
 export async function fire(s: Schedule, now = Date.now()) {
   const claimed = await db.prepare("update schedules set last_run=? where id=? and last_run is ?").run(now, s.id, s.last_run);
   if (!claimed.changes) return null;
   const threadId = generateId();
-  let error: string | null = null;
+  let error: string | null;
   try {
-    const res = await inWorkspace(s.workspace_id, () => asUser(s.user_id, () =>
-      runTurn(s.workspace_id, s.user_id, { id: threadId, agentId: s.agent_id, message: { id: generateId(), role: "user", parts: [{ type: "text", text: s.prompt }] } })));
-    const body = await res.text(); // reading to the end is what saves the chat
-    if (!res.ok) error = body.slice(0, 300);
+    error = await runToEnd(s.workspace_id, s.user_id, { id: threadId, agentId: s.agent_id, message: { id: generateId(), role: "user", parts: [{ type: "text", text: s.prompt }] } });
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
-  await db.prepare("update schedules set last_thread=?, last_error=? where id=?").run(error ? s.last_thread : threadId, error, s.id);
-  return error ? null : threadId;
+  // a run that failed mid-stream may still have saved its chat
+  const saved = await db.prepare("select 1 from threads where id=?").get(threadId);
+  await db.prepare("update schedules set last_thread=?, last_error=? where id=?").run(saved ? threadId : s.last_thread, error, s.id);
+  return { thread: saved ? threadId : null, error };
 }
+
+// a schedule may run only while its creator is a member and its agent exists: it runs as them, with that agent
+const LIVE = `select s.* from schedules s join members m on m.workspace_id=s.workspace_id and m.user_id=s.user_id
+  join agents a on a.id=s.agent_id and a.workspace_id=s.workspace_id`;
+/** The schedule, if it may still run (see LIVE). */
+export const runnable = async (id: string) => (await db.prepare(`${LIVE} where s.id=?`).get(id)) as Schedule | undefined;
 
 const PARALLEL = 5;
 // ponytail: every due schedule in one 300s function, 5 at a time; a queue (Vercel Queues) if a tick ever has more than fits
 /** The cron tick: every enabled schedule that's due, across workspaces, whose creator is still a member and agent still exists. */
 export async function runDue(now = Date.now()) {
-  const rows = (await db.prepare(
-    `select s.* from schedules s join members m on m.workspace_id=s.workspace_id and m.user_id=s.user_id
-     join agents a on a.id=s.agent_id and a.workspace_id=s.workspace_id where s.enabled=1`,
-  ).all()) as Schedule[];
+  const rows = (await db.prepare(`${LIVE} where s.enabled=1`).all()) as Schedule[];
   const queue = rows.filter((s) => isDue(s, now));
   let fired = 0;
   await Promise.all(Array.from({ length: PARALLEL }, async () => {
-    for (let s; (s = queue.shift()); ) if (await fire(s, now)) fired++;
+    for (let s; (s = queue.shift()); ) if ((await fire(s, now))?.thread) fired++;
   }));
   return fired;
 }

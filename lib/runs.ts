@@ -70,28 +70,33 @@ export const listRuns = async (user: string | null, agent?: string, status?: str
      order by r.started desc limit 100`,
   ).all(await ws(), user, user, agent ?? null, agent ?? null, status ?? null, status ?? null)) as Run[];
 
-type ApprovalPart = { type: string; toolName?: string; input?: unknown; approval?: { id: string; approved?: boolean; reason?: string; isAutomatic?: boolean } };
+type ApprovalPart = { type: string; state?: string; toolName?: string; input?: unknown; approval?: { id: string; approved?: boolean; reason?: string; isAutomatic?: boolean } };
 const toolOf = (p: ApprovalPart) => (p.type === "dynamic-tool" ? (p.toolName ?? "tool") : p.type.replace(/^tool-/, ""));
 
 /**
  * Records approval requests and decisions found in a message's tool parts. Safe to call repeatedly:
  * a request is stored once (pending) and a decision is applied once, so the same message can be synced on every turn.
+ * Applying a decision is also the claim on it: returns the fresh answers (approval-responded, about to run) that were
+ * already decided, by another tab, a double click or the Inbox. The caller must not resume those.
  */
 export async function syncApprovals(runId: string, threadId: string, agentId: string | null | undefined, message: UIMessage | undefined) {
-  if (!message || message.role !== "assistant") return;
-  const stmts: [string, ...unknown[]][] = [];
+  if (!message || message.role !== "assistant") return [];
   const [w, u] = [await ws(), await me()];
-  for (const p of message.parts as ApprovalPart[]) {
-    const a = p.approval;
-    if (!a?.id) continue;
-    stmts.push(["insert into approvals (workspace_id,user_id,approval_id,run_id,thread_id,agent_id,tool,input,requested) values (?,?,?,?,?,?,?,?,?) on conflict(approval_id) do nothing",
-      w, u, a.id, runId, threadId, agentId ?? null, toolOf(p), clip(p.input), Date.now()]);
-    if (typeof a.approved === "boolean")
-      // only the chat's owner decides its approvals
-      stmts.push(["update approvals set decision=?, reason=?, automatic=?, decided=?, decided_run=? where approval_id=? and workspace_id=? and user_id=? and decision='pending'",
-        a.approved ? "approved" : "denied", a.reason ?? null, a.isAutomatic ? 1 : 0, Date.now(), runId, a.id, w, u]);
+  const parts = (message.parts as ApprovalPart[]).filter((p) => p.approval?.id);
+  if (parts.length)
+    await db.batch(parts.map((p): [string, ...unknown[]] => [
+      "insert into approvals (workspace_id,user_id,approval_id,run_id,thread_id,agent_id,tool,input,requested) values (?,?,?,?,?,?,?,?,?) on conflict(approval_id) do nothing",
+      w, u, p.approval!.id, runId, threadId, agentId ?? null, toolOf(p), clip(p.input), Date.now()]));
+  const taken: string[] = [];
+  for (const p of parts) {
+    const a = p.approval!;
+    if (typeof a.approved !== "boolean") continue;
+    // only the chat's owner decides its approvals
+    const r = await db.prepare("update approvals set decision=?, reason=?, automatic=?, decided=?, decided_run=? where approval_id=? and workspace_id=? and user_id=? and decision='pending'")
+      .run(a.approved ? "approved" : "denied", a.reason ?? null, a.isAutomatic ? 1 : 0, Date.now(), runId, a.id, w, u);
+    if (!r.changes && p.state === "approval-responded") taken.push(a.id);
   }
-  if (stmts.length) await db.batch(stmts);
+  return taken;
 }
 
 export const listApprovals = async (user: string | null, agent?: string, decision?: string) =>
